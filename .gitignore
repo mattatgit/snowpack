@@ -31,3 +31,6 @@ data/processed/
 # Web
 node_modules/
 dist/
+
+# Generated viewer data
+web/data/

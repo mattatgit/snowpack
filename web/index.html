@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snowpack — Furanodake terrain POC</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0c0d0e; color: #ececec; overflow: hidden; }
+    #app { position: relative; width: 100vw; height: 100vh; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .panel { position: absolute; left: 18px; top: 18px; z-index: 2; width: min(330px, calc(100vw - 36px)); padding: 14px 15px; border: 1px solid rgba(255,255,255,.15); border-radius: 12px; background: rgba(18,20,21,.88); backdrop-filter: blur(10px); }
+    h1 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+    .sub { margin: 0 0 13px; color: #aeb3b5; font-size: 12px; line-height: 1.4; }
+    .row { display: grid; grid-template-columns: 88px 1fr; gap: 10px; align-items: center; margin: 9px 0; font-size: 12px; }
+    select, input { width: 100%; }
+    select { min-height: 34px; padding: 4px 8px; color: inherit; background: #191c1e; border: 1px solid #404548; border-radius: 7px; }
+    input[type="range"] { accent-color: #d7dcde; }
+    #status { margin-top: 10px; color: #aeb3b5; font-size: 11px; line-height: 1.45; }
+    .legend { margin-top: 10px; display: none; }
+    .legend.visible { display: block; }
+    .bar { height: 7px; border-radius: 999px; background: linear-gradient(90deg,#28323d,#5b6e7d,#d9d3bb,#f1f1ee); }
+    .bar.slope { background: linear-gradient(90deg,#27312d,#807e56,#b4744f,#e1d7d0); }
+    .bar.aspect { background: linear-gradient(90deg,#da6565,#d7cb62,#65b884,#6094d2,#da6565); }
+    .labels { display:flex; justify-content:space-between; margin-top:4px; color:#969c9f; font-size:10px; }
+    .attribution { position:absolute; right:12px; bottom:10px; max-width:min(520px, calc(100vw - 24px)); color:#9ca2a5; font-size:10px; text-align:right; z-index:2; text-shadow:0 1px 2px #000; }
+    .error { color:#efb1a8; }
+    @media (max-width: 620px) { .panel { top: 10px; left: 10px; width: calc(100vw - 20px); } .row { grid-template-columns: 76px 1fr; } }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="panel">
+    <h1>Furanodake terrain</h1>
+    <p class="sub">GSI DEM5A terrain POC. Drag to rotate, scroll/pinch to zoom, right-drag to pan.</p>
+    <label class="row"><span>Layer</span><select id="layer"><option value="terrain">Terrain</option><option value="slope">Slope</option><option value="aspect">Aspect</option></select></label>
+    <label class="row"><span>Vertical</span><input id="exaggeration" type="range" min="0.5" max="2.5" value="1.15" step="0.05"></label>
+    <div id="terrainLegend" class="legend visible"><div class="bar"></div><div class="labels"><span>low</span><span>elevation</span><span>high</span></div></div>
+    <div id="slopeLegend" class="legend"><div class="bar slope"></div><div class="labels"><span>0°</span><span>30°</span><span>60°+</span></div></div>
+    <div id="aspectLegend" class="legend"><div class="bar aspect"></div><div class="labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div></div>
+    <div id="status">Loading terrain…</div>
+  </div>
+  <div id="attribution" class="attribution"></div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js';
+
+const status = document.querySelector('#status');
+const app = document.querySelector('#app');
+const layerSelect = document.querySelector('#layer');
+const exaggeration = document.querySelector('#exaggeration');
+const legends = {
+  terrain: document.querySelector('#terrainLegend'),
+  slope: document.querySelector('#slopeLegend'),
+  aspect: document.querySelector('#aspectLegend'),
+};
+
+async function loadFloat32(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  return new Float32Array(await response.arrayBuffer());
+}
+
+function terrainColor(t) {
+  const stops = [
+    [0.00, [0.16,0.20,0.24]], [0.38, [0.35,0.43,0.49]],
+    [0.72, [0.73,0.70,0.61]], [1.00, [0.94,0.94,0.91]],
+  ];
+  for (let i=1;i<stops.length;i++) {
+    if (t <= stops[i][0]) {
+      const [a,ca]=stops[i-1], [b,cb]=stops[i]; const f=(t-a)/(b-a);
+      return ca.map((v,j)=>v+(cb[j]-v)*f);
+    }
+  }
+  return stops.at(-1)[1];
+}
+function slopeColor(deg) {
+  const t=Math.min(Math.max(deg/60,0),1);
+  const a=[0.15,0.19,0.17], b=[0.88,0.84,0.81];
+  return a.map((v,i)=>v+(b[i]-v)*t);
+}
+function aspectColor(deg) {
+  const h=((deg%360)+360)%360/360;
+  const c=new THREE.Color().setHSL(h,0.48,0.58);
+  return [c.r,c.g,c.b];
+}
+
+try {
+  const [meta,elevation,slope,aspect] = await Promise.all([
+    fetch('./data/terrain-meta.json').then(r=>{if(!r.ok) throw new Error(`metadata: ${r.status}`); return r.json();}),
+    loadFloat32('./data/elevation.bin'), loadFloat32('./data/slope.bin'), loadFloat32('./data/aspect.bin'),
+  ]);
+  const expected=meta.width*meta.height;
+  if ([elevation.length,slope.length,aspect.length].some(n=>n!==expected)) throw new Error('Terrain data size mismatch');
+
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x0c0d0e);
+  scene.fog=new THREE.Fog(0x0c0d0e, 11000, 23000);
+  const camera=new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 10, 50000);
+  const renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.outputColorSpace=THREE.SRGBColorSpace;
+  app.prepend(renderer.domElement);
+
+  const widthM=meta.east_m-meta.west_m, heightM=meta.north_m-meta.south_m;
+  const minE=meta.elevation_min_m, maxE=meta.elevation_max_m;
+  const positions=new Float32Array(expected*3), colors=new Float32Array(expected*3);
+  for (let row=0;row<meta.height;row++) for (let col=0;col<meta.width;col++) {
+    const i=row*meta.width+col, p=i*3;
+    positions[p]=(col/(meta.width-1)-0.5)*widthM;
+    positions[p+1]=elevation[i]-minE;
+    positions[p+2]=(row/(meta.height-1)-0.5)*heightM;
+  }
+  const indices=new Uint32Array((meta.width-1)*(meta.height-1)*6); let k=0;
+  for (let row=0;row<meta.height-1;row++) for (let col=0;col<meta.width-1;col++) {
+    const a=row*meta.width+col, b=a+1, c=a+meta.width, d=c+1;
+    indices[k++]=a; indices[k++]=c; indices[k++]=b; indices[k++]=b; indices[k++]=c; indices[k++]=d;
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  geometry.setIndex(new THREE.BufferAttribute(indices,1));
+  geometry.computeVertexNormals();
+  const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.93,metalness:0.02,side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(geometry,material); scene.add(mesh);
+  scene.add(new THREE.HemisphereLight(0xdde4e8,0x34302b,1.3));
+  const sun=new THREE.DirectionalLight(0xffffff,2.3); sun.position.set(-4000,9000,-3500); scene.add(sun);
+
+  camera.position.set(-8500,6400,8800);
+  const controls=new OrbitControls(camera,renderer.domElement);
+  controls.target.set(0,(maxE-minE)*0.32,0); controls.enableDamping=true; controls.dampingFactor=0.07;
+  controls.minDistance=1800; controls.maxDistance=26000; controls.maxPolarAngle=Math.PI*0.49;
+
+  function updateColors(layer) {
+    const c=geometry.getAttribute('color').array;
+    for (let i=0;i<expected;i++) {
+      let rgb;
+      if (layer==='slope') rgb=slopeColor(slope[i]);
+      else if (layer==='aspect') rgb=aspectColor(aspect[i]);
+      else rgb=terrainColor((elevation[i]-minE)/(maxE-minE));
+      c[i*3]=rgb[0]; c[i*3+1]=rgb[1]; c[i*3+2]=rgb[2];
+    }
+    geometry.getAttribute('color').needsUpdate=true;
+    Object.entries(legends).forEach(([name,node])=>node.classList.toggle('visible',name===layer));
+  }
+  function updateExaggeration() { mesh.scale.y=Number(exaggeration.value); }
+  layerSelect.addEventListener('change',()=>updateColors(layerSelect.value));
+  exaggeration.addEventListener('input',updateExaggeration);
+  updateColors('terrain'); updateExaggeration();
+
+  document.querySelector('#attribution').textContent=meta.source_attribution;
+  status.textContent=`${meta.width} × ${meta.height} render grid · ${meta.resolution_m} m · elevation ${Math.round(minE)}–${Math.round(maxE)} m`;
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
+  function frame(){controls.update(); renderer.render(scene,camera); requestAnimationFrame(frame);} frame();
+} catch (error) {
+  console.error(error); status.classList.add('error'); status.textContent=`Could not load terrain: ${error.message}`;
+}
+</script>
+</body>
+</html>

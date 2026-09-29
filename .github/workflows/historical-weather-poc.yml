@@ -29,6 +29,10 @@ jobs:
         run: python -m pipeline.terrain.build_furanodake
       - name: Build historical weather forcing
         run: python -m pipeline.weather.build_historical_forcing
+      - name: Export terrain for viewer
+        run: python -m pipeline.terrain.export_web
+      - name: Export historical weather for viewer
+        run: python -m pipeline.weather.export_web
       - name: Show hourly forcing summary
         run: |
           head -n 8 data/processed/furanodake/weather/2025-12-29_2026-01-03/forcing-summary.csv
@@ -39,5 +43,8 @@ jobs:
           path: |
             data/processed/furanodake/weather/2025-12-29_2026-01-03/
             data/processed/furanodake/terrain/metadata.json
+            web/index.html
+            web/README.md
+            web/data/
           if-no-files-found: error
           retention-days: 7

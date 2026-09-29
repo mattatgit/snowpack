@@ -10,6 +10,7 @@ on:
       - "pipeline/terrain/**"
       - "tests/test_weather.py"
       - "pyproject.toml"
+      - "web/**"
       - ".github/workflows/historical-weather-poc.yml"
   workflow_dispatch:
 
@@ -33,6 +34,19 @@ jobs:
         run: python -m pipeline.terrain.export_web
       - name: Export historical weather for viewer
         run: python -m pipeline.weather.export_web
+      - name: Validate viewer JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path("web/index.html").read_text()
+          matches = re.findall(r'<script type="module">(.*?)</script>', html, re.S)
+          if len(matches) != 1:
+              raise SystemExit(f"Expected one module script, found {len(matches)}")
+          Path("/tmp/snowpack-viewer.mjs").write_text(matches[0])
+          PY
+          node --check /tmp/snowpack-viewer.mjs
       - name: Validate browser weather metadata
         run: |
           python - <<'PY'

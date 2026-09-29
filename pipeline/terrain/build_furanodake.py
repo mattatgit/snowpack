@@ -191,6 +191,11 @@ def run(config_path: Path, data_root: Path) -> None:
 
     slope, aspect = terrain_derivatives(elevation, resolution_m)
 
+    source_values, source_counts = np.unique(source_quality, return_counts=True)
+    cell_source_counts = {
+        str(int(value)): int(count) for value, count in zip(source_values, source_counts)
+    }
+
     write_geotiff(
         output_root / "elevation.tif",
         elevation,
@@ -243,6 +248,7 @@ def run(config_path: Path, data_root: Path) -> None:
             "3": "GSI DEM5C",
             "4": "GSI DEM10B fallback",
         },
+        "cell_source_counts": cell_source_counts,
         "attribution": "地理院タイル（標高タイル（基盤地図情報数値標高モデル））を加工して作成",
     }
     (output_root / "metadata.json").write_text(
@@ -259,6 +265,7 @@ def run(config_path: Path, data_root: Path) -> None:
     )
     print(f"DEM5 tile counts: {dem5_counts}")
     print(f"DEM10 tile counts: {dem10_counts}")
+    print(f"Cell source counts: {cell_source_counts}")
 
 
 if __name__ == "__main__":

@@ -123,6 +123,6 @@ if __name__ == "__main__":
         default=Path("data/processed/furanodake/weather/2025-12-29_2026-01-03"),
     )
     parser.add_argument("--output-root", type=Path, default=Path("web"))
-    parser.add_argument("--resolution", type=float, default=100.0)
+    parser.add_argument("--resolution", type=float, default=50.0)
     args = parser.parse_args()
     run(args.forcing_root, args.output_root, args.resolution)

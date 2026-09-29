@@ -98,7 +98,7 @@ def run(
             "east": east,
             "north": north,
         },
-        "summary": summary.to_dict(orient="records"),
+        "summary": json.loads(summary.to_json(orient="records")),
         "model_warnings": {
             "wind": metadata["model"]["wind"]["warning"],
             "shortwave": metadata["model"]["shortwave"]["warning"],
@@ -106,7 +106,7 @@ def run(
         "source": "JMA AMeDAS observations downscaled over GSI terrain",
     }
     (data_root / "weather-meta.json").write_text(
-        json.dumps(web_meta, ensure_ascii=False, indent=2) + "\n",
+        json.dumps(web_meta, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     print(

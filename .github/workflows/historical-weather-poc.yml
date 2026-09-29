@@ -6,6 +6,8 @@ on:
       - prototype/furanodake-poc
     paths:
       - "config/furanodake-weather.json"
+      - "config/furanodake-features.json"
+      - "pipeline/landcover/**"
       - "pipeline/weather/**"
       - "pipeline/terrain/**"
       - "tests/test_weather.py"
@@ -28,10 +30,16 @@ jobs:
       - run: pytest -q
       - name: Build terrain dependency
         run: python -m pipeline.terrain.build_furanodake
+      - name: Probe DEM1A coverage
+        run: python -m pipeline.terrain.probe_dem1a
       - name: Build historical weather forcing
         run: python -m pipeline.weather.build_historical_forcing
       - name: Export terrain for viewer
         run: python -m pipeline.terrain.export_web
+      - name: Export terrain labels
+        run: python -m pipeline.terrain.export_features
+      - name: Export forest cover for viewer
+        run: python -m pipeline.landcover.worldcover
       - name: Export historical weather for viewer
         run: python -m pipeline.weather.export_web
       - name: Validate viewer JavaScript syntax

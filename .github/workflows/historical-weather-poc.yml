@@ -31,13 +31,13 @@ jobs:
         run: python -m pipeline.weather.build_historical_forcing
       - name: Show hourly forcing summary
         run: |
-          head -n 8 data/processed/furanodake/weather/2025-12-31_2026-01-03/forcing-summary.csv
-          tail -n 8 data/processed/furanodake/weather/2025-12-31_2026-01-03/forcing-summary.csv
+          head -n 8 data/processed/furanodake/weather/2025-12-29_2026-01-03/forcing-summary.csv
+          tail -n 8 data/processed/furanodake/weather/2025-12-29_2026-01-03/forcing-summary.csv
       - uses: actions/upload-artifact@v4
         with:
           name: furanodake-historical-weather-poc
           path: |
-            data/processed/furanodake/weather/2025-12-31_2026-01-03/
+            data/processed/furanodake/weather/2025-12-29_2026-01-03/
             data/processed/furanodake/terrain/metadata.json
           if-no-files-found: error
           retention-days: 7

@@ -98,8 +98,10 @@ const legends = Object.fromEntries(
 );
 const weatherLayers = new Set(['temperature','snowfall','wind','solar']);
 
+const BUILD_ID = 'weather-lazy-20260929-1';
+
 async function loadFloat32(url) {
-  const response = await fetch(url);
+  const response = await fetch(url + '?v=' + BUILD_ID, { cache: 'no-store' });
   if (!response.ok) throw new Error(`${url}: ${response.status}`);
   return new Float32Array(await response.arrayBuffer());
 }
@@ -167,7 +169,7 @@ function formatTime(iso) {
 
 try {
   const [meta,elevation,slope,aspect] = await Promise.all([
-    fetch('./data/terrain-meta.json').then(r=>{if(!r.ok) throw new Error(`metadata: ${r.status}`); return r.json();}),
+    fetch('./data/terrain-meta.json?v=' + BUILD_ID, {cache:'no-store'}).then(r=>{if(!r.ok) throw new Error(`metadata: ${r.status}`); return r.json();}),
     loadFloat32('./data/elevation.bin'), loadFloat32('./data/slope.bin'), loadFloat32('./data/aspect.bin'),
   ]);
   const expected=meta.width*meta.height;
@@ -210,11 +212,16 @@ try {
     });
   }
 
+  const weatherFiles = {
+    temperature: { key: 'temperature', url: './data/weather-temperature.bin', label: 'Temperature' },
+    snowfall: { key: 'snowfall', url: './data/weather-snowfall-water.bin', label: 'Hourly snowfall' },
+    wind: { key: 'windSpeed', url: './data/weather-wind-speed.bin', label: 'Wind speed' },
+    solar: { key: 'shortwave', url: './data/weather-shortwave.bin', label: 'Solar loading' },
+  };
+
   function weatherValue(layer,index) {
-    if(layer==='temperature') return weather.temperature[index];
-    if(layer==='snowfall') return weather.snowfall[index];
-    if(layer==='wind') return weather.windSpeed[index];
-    return weather.shortwave[index];
+    const spec=weatherFiles[layer];
+    return weather?.data?.[spec.key]?.[index];
   }
   function weatherColor(layer,value) {
     if(layer==='temperature') return temperatureColor(value);
@@ -222,14 +229,51 @@ try {
     if(layer==='wind') return windColor(value);
     return solarColor(value);
   }
-  function updateWeatherColors() {
+
+  async function ensureWeatherLayer(layer) {
+    if (!weather || !weatherFiles[layer]) return false;
+    const spec=weatherFiles[layer];
+    if (weather.data[spec.key]) return true;
+    if (weather.loading[spec.key]) {
+      await weather.loading[spec.key];
+      return Boolean(weather.data[spec.key]);
+    }
+
+    status.classList.remove('error');
+    status.textContent=`Loading ${spec.label.toLowerCase()} data…`;
+    const promise=loadFloat32(spec.url).then(array=>{
+      const expected=weather.meta.width*weather.meta.height*weather.meta.hours;
+      if(array.length!==expected) {
+        throw new Error(`${spec.label} size mismatch: expected ${expected} values, got ${array.length}`);
+      }
+      weather.data[spec.key]=array;
+      return array;
+    }).finally(()=>{
+      delete weather.loading[spec.key];
+    });
+    weather.loading[spec.key]=promise;
+    try {
+      await promise;
+      return true;
+    } catch (error) {
+      console.error(error);
+      status.classList.add('error');
+      status.textContent=`${spec.label} failed to load: ${error.message}`;
+      return false;
+    }
+  }
+
+  function renderWeatherColors(layer) {
     if (!weather || !weatherMesh) return;
-    const layer=layerSelect.value, t=Number(timeSlider.value);
+    const spec=weatherFiles[layer];
+    if (!spec || !weather.data[spec.key]) return;
+    const t=Number(timeSlider.value);
     const count=weather.meta.width*weather.meta.height;
     const offset=t*count;
     setColors(weatherMesh.geometry,count,i=>weatherColor(layer,weatherValue(layer,offset+i)));
     const summary=weather.meta.summary[t];
     timeLabel.textContent=formatTime(weather.meta.timestamps_end_jst[t]);
+    status.classList.remove('error');
     if (layer==='temperature') {
       status.textContent=`Mountain mean ${summary.temperature_mean_c.toFixed(1)}°C · range ${summary.temperature_min_c.toFixed(1)} to ${summary.temperature_max_c.toFixed(1)}°C`;
     } else if (layer==='snowfall') {
@@ -241,7 +285,13 @@ try {
     }
   }
 
-  function updateLayer() {
+  async function updateWeatherColors() {
+    const layer=layerSelect.value;
+    if(!weatherLayers.has(layer) || !weather || !weatherMesh) return;
+    if(await ensureWeatherLayer(layer)) renderWeatherColors(layer);
+  }
+
+  async function updateLayer() {
     const layer=layerSelect.value;
     const isWeather=weatherLayers.has(layer);
     terrainMesh.visible=!isWeather;
@@ -252,11 +302,12 @@ try {
     windNotice.classList.toggle('visible',layer==='wind');
     solarNotice.classList.toggle('visible',layer==='solar');
     if(isWeather) {
-      if(weather) updateWeatherColors();
-      else status.textContent='Loading historical weather forcing…';
+      if(weather && weatherMesh) await updateWeatherColors();
+      else status.textContent='Loading weather metadata…';
     } else {
       updateTerrainColors(layer);
-      status.textContent=`${meta.width} × ${meta.height} terrain render grid · ${meta.resolution_m} m · elevation ${Math.round(minE)}–${Math.round(maxE)} m`;
+      status.classList.remove('error');
+      status.textContent=`${meta.width} × ${meta.height} terrain render grid · ${meta.resolution_m} m · elevation ${Math.round(minE)}–${Math.round(maxE)} m · build ${BUILD_ID}`;
     }
   }
   function updateExaggeration() {
@@ -264,30 +315,32 @@ try {
     terrainMesh.scale.y=value;
     if(weatherMesh) weatherMesh.scale.y=value;
   }
-  layerSelect.addEventListener('change',updateLayer);
+  layerSelect.addEventListener('change',()=>{ void updateLayer(); });
   exaggeration.addEventListener('input',updateExaggeration);
-  timeSlider.addEventListener('input',updateWeatherColors);
+  timeSlider.addEventListener('input',()=>{ void updateWeatherColors(); });
   updateTerrainColors('terrain'); updateExaggeration();
 
   document.querySelector('#attribution').textContent=meta.source_attribution+' · Weather: JMA AMeDAS observations, modelled downscaling';
-  status.textContent=`${meta.width} × ${meta.height} terrain render grid · loading weather forcing in background…`;
+  status.textContent=`${meta.width} × ${meta.height} terrain render grid · loading weather metadata… · build ${BUILD_ID}`;
 
-  async function loadWeather() {
-    const weatherMeta=await fetch('./data/weather-meta.json').then(r=>{if(!r.ok) throw new Error(`weather metadata: ${r.status}`); return r.json();});
-    const [weatherElevation,temperature,snowfall,windSpeed,windDirection,shortwave] = await Promise.all([
-      loadFloat32('./data/weather-elevation.bin'),
-      loadFloat32('./data/weather-temperature.bin'),
-      loadFloat32('./data/weather-snowfall-water.bin'),
-      loadFloat32('./data/weather-wind-speed.bin'),
-      loadFloat32('./data/weather-wind-direction.bin'),
-      loadFloat32('./data/weather-shortwave.bin'),
-    ]);
-    const count=weatherMeta.width*weatherMeta.height;
-    if(weatherElevation.length!==count) throw new Error('Weather elevation size mismatch');
-    for (const array of [temperature,snowfall,windSpeed,windDirection,shortwave]) {
-      if(array.length!==count*weatherMeta.hours) throw new Error('Weather forcing size mismatch');
+  async function loadWeatherMetadata() {
+    const response=await fetch('./data/weather-meta.json?v=' + BUILD_ID, {cache:'no-store'});
+    if(!response.ok) throw new Error(`weather metadata HTTP ${response.status}`);
+    const raw=await response.text();
+    let weatherMeta;
+    try {
+      weatherMeta=JSON.parse(raw);
+    } catch(error) {
+      throw new Error(`weather metadata JSON parse failed: ${error.message}`);
     }
-    weather={meta:weatherMeta,elevation:weatherElevation,temperature,snowfall,windSpeed,windDirection,shortwave};
+
+    const weatherElevation=await loadFloat32('./data/weather-elevation.bin');
+    const count=weatherMeta.width*weatherMeta.height;
+    if(weatherElevation.length!==count) {
+      throw new Error(`weather elevation size mismatch: expected ${count}, got ${weatherElevation.length}`);
+    }
+
+    weather={meta:weatherMeta,elevation:weatherElevation,data:{},loading:{}};
     const bounds=weatherMeta.bounds_m;
     const res=weatherMeta.render_resolution_m;
     const geometry=buildGeometry(weatherMeta.width,weatherMeta.height,(row,col,i)=>{
@@ -296,25 +349,30 @@ try {
       return [x-centreX, weatherElevation[i]-minE, centreY-y];
     });
     weatherMesh=new THREE.Mesh(geometry,material.clone());
-    weatherMesh.visible=false; weatherMesh.scale.y=Number(exaggeration.value); scene.add(weatherMesh);
+    weatherMesh.visible=false;
+    weatherMesh.scale.y=Number(exaggeration.value);
+    scene.add(weatherMesh);
+
     timeSlider.max=String(weatherMeta.hours-1);
     timeSlider.value='0';
     [...layerSelect.options].filter(o=>weatherLayers.has(o.value)).forEach(o=>{
       o.disabled=false;
-      o.textContent={
-        temperature:'Temperature',
-        snowfall:'Hourly snowfall',
-        wind:'Wind speed',
-        solar:'Solar loading'
-      }[o.value];
+      o.textContent=weatherFiles[o.value].label;
     });
-    if(weatherLayers.has(layerSelect.value)) updateLayer();
-    else status.textContent=`${meta.width} × ${meta.height} terrain render grid · weather forcing ready (${weatherMeta.hours} hours)`;
+
+    status.classList.remove('error');
+    status.textContent=`Weather metadata ready · ${weatherMeta.hours} hours · choose a weather layer to load it · build ${BUILD_ID}`;
+    if(weatherLayers.has(layerSelect.value)) await updateLayer();
   }
-  loadWeather().catch(error=>{
+
+  loadWeatherMetadata().catch(error=>{
     console.error(error);
-    [...layerSelect.options].filter(o=>weatherLayers.has(o.value)).forEach(o=>{o.disabled=true; o.textContent+=' — unavailable';});
-    status.classList.add('error'); status.textContent=`Terrain loaded; weather forcing failed: ${error.message}`;
+    [...layerSelect.options].filter(o=>weatherLayers.has(o.value)).forEach(o=>{
+      o.disabled=true;
+      o.textContent=weatherFiles[o.value].label+' — unavailable';
+    });
+    status.classList.add('error');
+    status.textContent=`Terrain loaded; weather metadata failed: ${error.message} · build ${BUILD_ID}`;
   });
 
   addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});

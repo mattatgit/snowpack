@@ -1,0 +1,30 @@
+name: Terrain POC
+
+on:
+  push:
+    branches:
+      - prototype/furanodake-poc
+  workflow_dispatch:
+
+jobs:
+  build-furanodake-terrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: pytest -q
+      - name: Build Furanodake terrain
+        run: python -m pipeline.terrain.build_furanodake
+      - name: Show acquisition metadata
+        run: cat data/processed/furanodake/terrain/metadata.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: furanodake-terrain-poc
+          path: data/processed/furanodake/terrain/
+          if-no-files-found: error
+          retention-days: 7

@@ -33,6 +33,21 @@ jobs:
         run: python -m pipeline.terrain.export_web
       - name: Export historical weather for viewer
         run: python -m pipeline.weather.export_web
+      - name: Validate browser weather metadata
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("web/data/weather-meta.json")
+          json.loads(
+              path.read_text(),
+              parse_constant=lambda value: (_ for _ in ()).throw(
+                  ValueError(f"Non-standard JSON value: {value}")
+              ),
+          )
+          print("weather-meta.json is strict JSON")
+          PY
       - name: Show hourly forcing summary
         run: |
           head -n 8 data/processed/furanodake/weather/2025-12-29_2026-01-03/forcing-summary.csv

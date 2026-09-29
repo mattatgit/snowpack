@@ -3,46 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Snowpack — Furanodake terrain POC</title>
+  <title>Snowpack — Furanodake POC</title>
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #0c0d0e; color: #ececec; overflow: hidden; }
     #app { position: relative; width: 100vw; height: 100vh; }
     canvas { display: block; width: 100%; height: 100%; }
-    .panel { position: absolute; left: 18px; top: 18px; z-index: 2; width: min(330px, calc(100vw - 36px)); padding: 14px 15px; border: 1px solid rgba(255,255,255,.15); border-radius: 12px; background: rgba(18,20,21,.88); backdrop-filter: blur(10px); }
+    .panel { position: absolute; left: 18px; top: 18px; z-index: 2; width: min(370px, calc(100vw - 36px)); padding: 14px 15px; border: 1px solid rgba(255,255,255,.15); border-radius: 12px; background: rgba(18,20,21,.9); backdrop-filter: blur(10px); }
     h1 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
     .sub { margin: 0 0 13px; color: #aeb3b5; font-size: 12px; line-height: 1.4; }
     .row { display: grid; grid-template-columns: 88px 1fr; gap: 10px; align-items: center; margin: 9px 0; font-size: 12px; }
+    .time-row { display: none; }
+    .time-row.visible { display: grid; }
     select, input { width: 100%; }
     select { min-height: 34px; padding: 4px 8px; color: inherit; background: #191c1e; border: 1px solid #404548; border-radius: 7px; }
     input[type="range"] { accent-color: #d7dcde; }
-    #status { margin-top: 10px; color: #aeb3b5; font-size: 11px; line-height: 1.45; }
+    #timeLabel { margin: -3px 0 3px 98px; min-height: 16px; color: #d4d7d8; font-size: 11px; }
+    #status { margin-top: 10px; color: #aeb3b5; font-size: 11px; line-height: 1.5; }
     .legend { margin-top: 10px; display: none; }
     .legend.visible { display: block; }
-    .bar { height: 7px; border-radius: 999px; background: linear-gradient(90deg,#28323d,#5b6e7d,#d9d3bb,#f1f1ee); }
-    .bar.slope { background: linear-gradient(90deg,#27312d,#807e56,#b4744f,#e1d7d0); }
-    .bar.aspect { background: linear-gradient(90deg,#da6565,#d7cb62,#65b884,#6094d2,#da6565); }
+    .bar { height: 7px; border-radius: 999px; }
+    .terrain-bar { background: linear-gradient(90deg,#28323d,#5b6e7d,#d9d3bb,#f1f1ee); }
+    .slope-bar { background: linear-gradient(90deg,#27312d,#807e56,#b4744f,#e1d7d0); }
+    .aspect-bar { background: linear-gradient(90deg,#da6565,#d7cb62,#65b884,#6094d2,#da6565); }
+    .temperature-bar { background: linear-gradient(90deg,#272d5e,#446aa5,#8fc8d5,#e8e1cf); }
+    .snowfall-bar { background: linear-gradient(90deg,#25292c,#657b8b,#c9dce7,#ffffff); }
+    .wind-bar { background: linear-gradient(90deg,#27302f,#708278,#c0a866,#e4d4c4); }
+    .solar-bar { background: linear-gradient(90deg,#26292d,#575f64,#b2a678,#eee5c9); }
     .labels { display:flex; justify-content:space-between; margin-top:4px; color:#969c9f; font-size:10px; }
-    .attribution { position:absolute; right:12px; bottom:10px; max-width:min(520px, calc(100vw - 24px)); color:#9ca2a5; font-size:10px; text-align:right; z-index:2; text-shadow:0 1px 2px #000; }
+    .notice { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.1); color:#8f9699; font-size:10px; line-height:1.4; display:none; }
+    .notice.visible { display:block; }
+    .attribution { position:absolute; right:12px; bottom:10px; max-width:min(560px, calc(100vw - 24px)); color:#9ca2a5; font-size:10px; text-align:right; z-index:2; text-shadow:0 1px 2px #000; }
     .error { color:#efb1a8; }
-    @media (max-width: 620px) { .panel { top: 10px; left: 10px; width: calc(100vw - 20px); } .row { grid-template-columns: 76px 1fr; } }
+    @media (max-width: 620px) { .panel { top: 10px; left: 10px; width: calc(100vw - 20px); } .row { grid-template-columns: 76px 1fr; } #timeLabel { margin-left: 86px; } }
   </style>
 </head>
 <body>
 <div id="app">
   <div class="panel">
-    <h1>Furanodake terrain</h1>
-    <p class="sub">GSI DEM5A terrain POC. Drag to rotate, scroll/pinch to zoom, right-drag to pan.</p>
-    <label class="row"><span>Layer</span><select id="layer"><option value="terrain">Terrain</option><option value="slope">Slope</option><option value="aspect">Aspect</option></select></label>
+    <h1>Furanodake</h1>
+    <p class="sub">Terrain + historical weather forcing POC. Drag to rotate, scroll/pinch to zoom, right-drag to pan.</p>
+    <label class="row"><span>Layer</span><select id="layer">
+      <option value="terrain">Terrain</option>
+      <option value="slope">Slope</option>
+      <option value="aspect">Aspect</option>
+      <option value="temperature" disabled>Temperature — loading…</option>
+      <option value="snowfall" disabled>Hourly snowfall — loading…</option>
+      <option value="wind" disabled>Wind speed — loading…</option>
+      <option value="solar" disabled>Solar loading — loading…</option>
+    </select></label>
     <label class="row"><span>Vertical</span><input id="exaggeration" type="range" min="0.5" max="2.5" value="1.15" step="0.05"></label>
-    <div id="terrainLegend" class="legend visible"><div class="bar"></div><div class="labels"><span>low</span><span>elevation</span><span>high</span></div></div>
-    <div id="slopeLegend" class="legend"><div class="bar slope"></div><div class="labels"><span>0°</span><span>30°</span><span>60°+</span></div></div>
-    <div id="aspectLegend" class="legend"><div class="bar aspect"></div><div class="labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div></div>
+    <label id="timeRow" class="row time-row"><span>Time</span><input id="time" type="range" min="0" max="143" value="0" step="1"></label>
+    <div id="timeLabel"></div>
+
+    <div id="terrainLegend" class="legend visible"><div class="bar terrain-bar"></div><div class="labels"><span>low</span><span>elevation</span><span>high</span></div></div>
+    <div id="slopeLegend" class="legend"><div class="bar slope-bar"></div><div class="labels"><span>0°</span><span>30°</span><span>60°+</span></div></div>
+    <div id="aspectLegend" class="legend"><div class="bar aspect-bar"></div><div class="labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div></div>
+    <div id="temperatureLegend" class="legend"><div class="bar temperature-bar"></div><div class="labels"><span>−25°C</span><span>−12°C</span><span>0°C</span></div></div>
+    <div id="snowfallLegend" class="legend"><div class="bar snowfall-bar"></div><div class="labels"><span>0</span><span>2</span><span>4+ mm SWE/h</span></div></div>
+    <div id="windLegend" class="legend"><div class="bar wind-bar"></div><div class="labels"><span>0</span><span>7.5</span><span>15+ m/s</span></div></div>
+    <div id="solarLegend" class="legend"><div class="bar solar-bar"></div><div class="labels"><span>0</span><span>400</span><span>800+ W/m²</span></div></div>
+
     <div id="status">Loading terrain…</div>
+    <div id="windNotice" class="notice">Wind is low-confidence in this v0: AMeDAS valley winds are elevation-adjusted but do not yet represent free-air/ridge flow or terrain acceleration/shelter.</div>
+    <div id="solarNotice" class="notice">Solar is relative terrain loading: slope/aspect + solar geometry + JMA sunshine fraction. Terrain-horizon shading and full radiation physics are not yet included.</div>
   </div>
   <div id="attribution" class="attribution"></div>
 </div>
+
 <script type="importmap">
 {
   "imports": {
@@ -59,11 +88,15 @@ const status = document.querySelector('#status');
 const app = document.querySelector('#app');
 const layerSelect = document.querySelector('#layer');
 const exaggeration = document.querySelector('#exaggeration');
-const legends = {
-  terrain: document.querySelector('#terrainLegend'),
-  slope: document.querySelector('#slopeLegend'),
-  aspect: document.querySelector('#aspectLegend'),
-};
+const timeSlider = document.querySelector('#time');
+const timeRow = document.querySelector('#timeRow');
+const timeLabel = document.querySelector('#timeLabel');
+const windNotice = document.querySelector('#windNotice');
+const solarNotice = document.querySelector('#solarNotice');
+const legends = Object.fromEntries(
+  ['terrain','slope','aspect','temperature','snowfall','wind','solar'].map(name => [name, document.querySelector('#'+name+'Legend')])
+);
+const weatherLayers = new Set(['temperature','snowfall','wind','solar']);
 
 async function loadFloat32(url) {
   const response = await fetch(url);
@@ -71,28 +104,65 @@ async function loadFloat32(url) {
   return new Float32Array(await response.arrayBuffer());
 }
 
-function terrainColor(t) {
-  const stops = [
-    [0.00, [0.16,0.20,0.24]], [0.38, [0.35,0.43,0.49]],
-    [0.72, [0.73,0.70,0.61]], [1.00, [0.94,0.94,0.91]],
-  ];
+function interpolateStops(t, stops) {
+  t=Math.min(Math.max(t,0),1);
   for (let i=1;i<stops.length;i++) {
-    if (t <= stops[i][0]) {
-      const [a,ca]=stops[i-1], [b,cb]=stops[i]; const f=(t-a)/(b-a);
+    if (t<=stops[i][0]) {
+      const [a,ca]=stops[i-1], [b,cb]=stops[i];
+      const f=(t-a)/(b-a || 1);
       return ca.map((v,j)=>v+(cb[j]-v)*f);
     }
   }
   return stops.at(-1)[1];
 }
-function slopeColor(deg) {
-  const t=Math.min(Math.max(deg/60,0),1);
-  const a=[0.15,0.19,0.17], b=[0.88,0.84,0.81];
-  return a.map((v,i)=>v+(b[i]-v)*t);
+function terrainColor(t) { return interpolateStops(t, [[0,[.16,.20,.24]],[.38,[.35,.43,.49]],[.72,[.73,.70,.61]],[1,[.94,.94,.91]]]); }
+function slopeColor(v) { return interpolateStops(v/60, [[0,[.15,.19,.17]],[.5,[.50,.49,.34]],[1,[.88,.84,.81]]]); }
+function aspectColor(deg) { const c=new THREE.Color().setHSL((((deg%360)+360)%360)/360,.48,.58); return [c.r,c.g,c.b]; }
+function temperatureColor(v) { return interpolateStops((v+25)/25, [[0,[.15,.18,.37]],[.5,[.28,.52,.67]],[1,[.91,.88,.81]]]); }
+function snowfallColor(v) { return interpolateStops(v/4, [[0,[.14,.16,.17]],[.35,[.31,.43,.52]],[.7,[.67,.80,.87]],[1,[1,1,1]]]); }
+function windColor(v) { return interpolateStops(v/15, [[0,[.15,.19,.18]],[.5,[.44,.51,.47]],[.8,[.72,.62,.37]],[1,[.89,.83,.77]]]); }
+function solarColor(v) { return interpolateStops(v/800, [[0,[.15,.16,.18]],[.45,[.34,.38,.39]],[.75,[.65,.59,.38]],[1,[.93,.89,.77]]]); }
+
+function buildGeometry(width,height,positionAt) {
+  const count=width*height;
+  const positions=new Float32Array(count*3);
+  const colors=new Float32Array(count*3);
+  for (let row=0;row<height;row++) for (let col=0;col<width;col++) {
+    const i=row*width+col, p=i*3;
+    const pos=positionAt(row,col,i);
+    positions[p]=pos[0]; positions[p+1]=pos[1]; positions[p+2]=pos[2];
+  }
+  const indices=new Uint32Array((width-1)*(height-1)*6); let k=0;
+  for (let row=0;row<height-1;row++) for (let col=0;col<width-1;col++) {
+    const a=row*width+col,b=a+1,c=a+width,d=c+1;
+    indices[k++]=a; indices[k++]=c; indices[k++]=b;
+    indices[k++]=b; indices[k++]=c; indices[k++]=d;
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  geometry.setIndex(new THREE.BufferAttribute(indices,1));
+  geometry.computeVertexNormals();
+  return geometry;
 }
-function aspectColor(deg) {
-  const h=((deg%360)+360)%360/360;
-  const c=new THREE.Color().setHSL(h,0.48,0.58);
-  return [c.r,c.g,c.b];
+
+function setColors(geometry,count,colorAt) {
+  const colors=geometry.getAttribute('color').array;
+  for (let i=0;i<count;i++) {
+    const rgb=colorAt(i);
+    colors[i*3]=rgb[0]; colors[i*3+1]=rgb[1]; colors[i*3+2]=rgb[2];
+  }
+  geometry.getAttribute('color').needsUpdate=true;
+}
+
+function cardinal(deg) {
+  if (!Number.isFinite(deg)) return 'calm/variable';
+  const names=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return names[Math.round(deg/22.5)%16];
+}
+function formatTime(iso) {
+  const date=new Date(iso);
+  return new Intl.DateTimeFormat('en-AU',{timeZone:'Asia/Tokyo',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(date)+' JST';
 }
 
 try {
@@ -105,8 +175,8 @@ try {
 
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0c0d0e);
-  scene.fog=new THREE.Fog(0x0c0d0e, 11000, 23000);
-  const camera=new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 10, 50000);
+  scene.fog=new THREE.Fog(0x0c0d0e,11000,23000);
+  const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,10,50000);
   const renderer=new THREE.WebGLRenderer({antialias:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.setSize(innerWidth,innerHeight);
@@ -114,53 +184,139 @@ try {
   app.prepend(renderer.domElement);
 
   const widthM=meta.east_m-meta.west_m, heightM=meta.north_m-meta.south_m;
+  const centreX=(meta.east_m+meta.west_m)/2, centreY=(meta.north_m+meta.south_m)/2;
   const minE=meta.elevation_min_m, maxE=meta.elevation_max_m;
-  const positions=new Float32Array(expected*3), colors=new Float32Array(expected*3);
-  for (let row=0;row<meta.height;row++) for (let col=0;col<meta.width;col++) {
-    const i=row*meta.width+col, p=i*3;
-    positions[p]=(col/(meta.width-1)-0.5)*widthM;
-    positions[p+1]=elevation[i]-minE;
-    positions[p+2]=(row/(meta.height-1)-0.5)*heightM;
-  }
-  const indices=new Uint32Array((meta.width-1)*(meta.height-1)*6); let k=0;
-  for (let row=0;row<meta.height-1;row++) for (let col=0;col<meta.width-1;col++) {
-    const a=row*meta.width+col, b=a+1, c=a+meta.width, d=c+1;
-    indices[k++]=a; indices[k++]=c; indices[k++]=b; indices[k++]=b; indices[k++]=c; indices[k++]=d;
-  }
-  const geometry=new THREE.BufferGeometry();
-  geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
-  geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
-  geometry.setIndex(new THREE.BufferAttribute(indices,1));
-  geometry.computeVertexNormals();
-  const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.93,metalness:0.02,side:THREE.DoubleSide});
-  const mesh=new THREE.Mesh(geometry,material); scene.add(mesh);
+  const terrainGeometry=buildGeometry(meta.width,meta.height,(row,col,i)=>[
+    (col/(meta.width-1)-.5)*widthM,
+    elevation[i]-minE,
+    (row/(meta.height-1)-.5)*heightM,
+  ]);
+  const material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.93,metalness:.02,side:THREE.DoubleSide});
+  const terrainMesh=new THREE.Mesh(terrainGeometry,material); scene.add(terrainMesh);
+  let weatherMesh=null, weather=null;
+
   scene.add(new THREE.HemisphereLight(0xdde4e8,0x34302b,1.3));
   const sun=new THREE.DirectionalLight(0xffffff,2.3); sun.position.set(-4000,9000,-3500); scene.add(sun);
-
   camera.position.set(-8500,6400,8800);
   const controls=new OrbitControls(camera,renderer.domElement);
-  controls.target.set(0,(maxE-minE)*0.32,0); controls.enableDamping=true; controls.dampingFactor=0.07;
-  controls.minDistance=1800; controls.maxDistance=26000; controls.maxPolarAngle=Math.PI*0.49;
+  controls.target.set(0,(maxE-minE)*.32,0); controls.enableDamping=true; controls.dampingFactor=.07;
+  controls.minDistance=1800; controls.maxDistance=26000; controls.maxPolarAngle=Math.PI*.49;
 
-  function updateColors(layer) {
-    const c=geometry.getAttribute('color').array;
-    for (let i=0;i<expected;i++) {
-      let rgb;
-      if (layer==='slope') rgb=slopeColor(slope[i]);
-      else if (layer==='aspect') rgb=aspectColor(aspect[i]);
-      else rgb=terrainColor((elevation[i]-minE)/(maxE-minE));
-      c[i*3]=rgb[0]; c[i*3+1]=rgb[1]; c[i*3+2]=rgb[2];
-    }
-    geometry.getAttribute('color').needsUpdate=true;
-    Object.entries(legends).forEach(([name,node])=>node.classList.toggle('visible',name===layer));
+  function updateTerrainColors(layer) {
+    setColors(terrainGeometry,expected,i=>{
+      if(layer==='slope') return slopeColor(slope[i]);
+      if(layer==='aspect') return aspectColor(aspect[i]);
+      return terrainColor((elevation[i]-minE)/(maxE-minE));
+    });
   }
-  function updateExaggeration() { mesh.scale.y=Number(exaggeration.value); }
-  layerSelect.addEventListener('change',()=>updateColors(layerSelect.value));
-  exaggeration.addEventListener('input',updateExaggeration);
-  updateColors('terrain'); updateExaggeration();
 
-  document.querySelector('#attribution').textContent=meta.source_attribution;
-  status.textContent=`${meta.width} × ${meta.height} render grid · ${meta.resolution_m} m · elevation ${Math.round(minE)}–${Math.round(maxE)} m`;
+  function weatherValue(layer,index) {
+    if(layer==='temperature') return weather.temperature[index];
+    if(layer==='snowfall') return weather.snowfall[index];
+    if(layer==='wind') return weather.windSpeed[index];
+    return weather.shortwave[index];
+  }
+  function weatherColor(layer,value) {
+    if(layer==='temperature') return temperatureColor(value);
+    if(layer==='snowfall') return snowfallColor(value);
+    if(layer==='wind') return windColor(value);
+    return solarColor(value);
+  }
+  function updateWeatherColors() {
+    if (!weather || !weatherMesh) return;
+    const layer=layerSelect.value, t=Number(timeSlider.value);
+    const count=weather.meta.width*weather.meta.height;
+    const offset=t*count;
+    setColors(weatherMesh.geometry,count,i=>weatherColor(layer,weatherValue(layer,offset+i)));
+    const summary=weather.meta.summary[t];
+    timeLabel.textContent=formatTime(weather.meta.timestamps_end_jst[t]);
+    if (layer==='temperature') {
+      status.textContent=`Mountain mean ${summary.temperature_mean_c.toFixed(1)}°C · range ${summary.temperature_min_c.toFixed(1)} to ${summary.temperature_max_c.toFixed(1)}°C`;
+    } else if (layer==='snowfall') {
+      status.textContent=`Mean snowfall water ${summary.snowfall_water_mean_mm.toFixed(2)} mm/h · precipitation ${summary.precipitation_mean_mm.toFixed(2)} mm/h`;
+    } else if (layer==='wind') {
+      status.textContent=`Mean wind ${summary.wind_speed_mean_m_s.toFixed(1)} m/s from ${cardinal(summary.wind_direction_mean_deg)} · low-confidence ridge estimate`;
+    } else {
+      status.textContent=`Mean slope-relative shortwave ${summary.shortwave_mean_w_m2.toFixed(0)} W/m² · maximum ${summary.shortwave_max_w_m2.toFixed(0)} W/m²`;
+    }
+  }
+
+  function updateLayer() {
+    const layer=layerSelect.value;
+    const isWeather=weatherLayers.has(layer);
+    terrainMesh.visible=!isWeather;
+    if(weatherMesh) weatherMesh.visible=isWeather;
+    timeRow.classList.toggle('visible',isWeather);
+    if(!isWeather) timeLabel.textContent='';
+    Object.entries(legends).forEach(([name,node])=>node.classList.toggle('visible',name===layer));
+    windNotice.classList.toggle('visible',layer==='wind');
+    solarNotice.classList.toggle('visible',layer==='solar');
+    if(isWeather) {
+      if(weather) updateWeatherColors();
+      else status.textContent='Loading historical weather forcing…';
+    } else {
+      updateTerrainColors(layer);
+      status.textContent=`${meta.width} × ${meta.height} terrain render grid · ${meta.resolution_m} m · elevation ${Math.round(minE)}–${Math.round(maxE)} m`;
+    }
+  }
+  function updateExaggeration() {
+    const value=Number(exaggeration.value);
+    terrainMesh.scale.y=value;
+    if(weatherMesh) weatherMesh.scale.y=value;
+  }
+  layerSelect.addEventListener('change',updateLayer);
+  exaggeration.addEventListener('input',updateExaggeration);
+  timeSlider.addEventListener('input',updateWeatherColors);
+  updateTerrainColors('terrain'); updateExaggeration();
+
+  document.querySelector('#attribution').textContent=meta.source_attribution+' · Weather: JMA AMeDAS observations, modelled downscaling';
+  status.textContent=`${meta.width} × ${meta.height} terrain render grid · loading weather forcing in background…`;
+
+  async function loadWeather() {
+    const weatherMeta=await fetch('./data/weather-meta.json').then(r=>{if(!r.ok) throw new Error(`weather metadata: ${r.status}`); return r.json();});
+    const [weatherElevation,temperature,snowfall,windSpeed,windDirection,shortwave] = await Promise.all([
+      loadFloat32('./data/weather-elevation.bin'),
+      loadFloat32('./data/weather-temperature.bin'),
+      loadFloat32('./data/weather-snowfall-water.bin'),
+      loadFloat32('./data/weather-wind-speed.bin'),
+      loadFloat32('./data/weather-wind-direction.bin'),
+      loadFloat32('./data/weather-shortwave.bin'),
+    ]);
+    const count=weatherMeta.width*weatherMeta.height;
+    if(weatherElevation.length!==count) throw new Error('Weather elevation size mismatch');
+    for (const array of [temperature,snowfall,windSpeed,windDirection,shortwave]) {
+      if(array.length!==count*weatherMeta.hours) throw new Error('Weather forcing size mismatch');
+    }
+    weather={meta:weatherMeta,elevation:weatherElevation,temperature,snowfall,windSpeed,windDirection,shortwave};
+    const bounds=weatherMeta.bounds_m;
+    const res=weatherMeta.render_resolution_m;
+    const geometry=buildGeometry(weatherMeta.width,weatherMeta.height,(row,col,i)=>{
+      const x=bounds.west+(col+.5)*res;
+      const y=bounds.north-(row+.5)*res;
+      return [x-centreX, weatherElevation[i]-minE, centreY-y];
+    });
+    weatherMesh=new THREE.Mesh(geometry,material.clone());
+    weatherMesh.visible=false; weatherMesh.scale.y=Number(exaggeration.value); scene.add(weatherMesh);
+    timeSlider.max=String(weatherMeta.hours-1);
+    timeSlider.value='0';
+    [...layerSelect.options].filter(o=>weatherLayers.has(o.value)).forEach(o=>{
+      o.disabled=false;
+      o.textContent={
+        temperature:'Temperature',
+        snowfall:'Hourly snowfall',
+        wind:'Wind speed',
+        solar:'Solar loading'
+      }[o.value];
+    });
+    if(weatherLayers.has(layerSelect.value)) updateLayer();
+    else status.textContent=`${meta.width} × ${meta.height} terrain render grid · weather forcing ready (${weatherMeta.hours} hours)`;
+  }
+  loadWeather().catch(error=>{
+    console.error(error);
+    [...layerSelect.options].filter(o=>weatherLayers.has(o.value)).forEach(o=>{o.disabled=true; o.textContent+=' — unavailable';});
+    status.classList.add('error'); status.textContent=`Terrain loaded; weather forcing failed: ${error.message}`;
+  });
+
   addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
   function frame(){controls.update(); renderer.render(scene,camera); requestAnimationFrame(frame);} frame();
 } catch (error) {

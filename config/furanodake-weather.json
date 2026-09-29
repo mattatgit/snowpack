@@ -1,6 +1,6 @@
 {
   "timezone": "Asia/Tokyo",
-  "period_start": "2025-12-31T00:00:00+09:00",
+  "period_start": "2025-12-29T00:00:00+09:00",
   "period_end": "2026-01-04T00:00:00+09:00",
   "forcing_resolution_m": 50.0,
   "temperature_lapse_rate_c_per_m": -0.0065,

@@ -406,7 +406,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path("data/processed/furanodake/weather/2025-12-31_2026-01-03"),
+        default=Path("data/processed/furanodake/weather/2025-12-29_2026-01-03"),
     )
     args = parser.parse_args()
     run(args.terrain_root, args.weather_config, args.output_root)

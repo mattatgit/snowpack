@@ -1,36 +1,35 @@
 # 3D viewer
 
-The first viewer is a deliberately small Three.js proof of concept for the real Furanodake terrain.
+The viewer now combines the real Furanodake terrain with the first historical weather-forcing reconstruction.
 
 It supports:
 
 - orbit / zoom / pan;
 - terrain, slope and aspect layers;
+- historical temperature;
+- hourly snowfall water equivalent;
+- wind speed;
+- slope-relative solar loading;
+- 144-hour time slider for 29 Dec 2025 through 3 Jan 2026;
 - adjustable vertical exaggeration;
-- GSI source attribution.
+- source attribution and explicit wind/solar confidence notes.
 
 ## Generate data
 
-After building the terrain rasters:
+Build terrain and weather first:
 
 ```bash
+python -m pipeline.terrain.build_furanodake
+python -m pipeline.weather.build_historical_forcing
 python -m pipeline.terrain.export_web
+python -m pipeline.weather.export_web
 ```
 
-This writes a 20 m browser grid to `web/data/`:
+The static terrain render grid is 20 m. Historical weather is exported at approximately 100 m for browser performance; the underlying forcing model remains approximately 50 m.
 
-```text
-terrain-meta.json
-elevation.bin
-slope.bin
-aspect.bin
-```
-
-The generated data directory is not committed to Git.
+Generated browser data live in `web/data/` and are not committed to Git.
 
 ## Run locally
-
-Browsers should load the binary terrain via HTTP rather than `file://`.
 
 From the repository root:
 
@@ -38,8 +37,12 @@ From the repository root:
 python -m http.server 8000
 ```
 
-Then open:
+Open:
 
 `http://localhost:8000/web/`
 
-The full terrain processing grid remains 5 m. The 20 m web grid is only a rendering representation and must not be fed back into the snow model.
+## Interpretation
+
+The historical weather layers are **forcing inputs**, not yet simulated snowpack.
+
+Temperature and precipitation use transparent terrain downscaling from JMA observations. Wind is deliberately labelled low-confidence because valley AMeDAS wind is not a substitute for free-air/ridge wind. Solar is a relative terrain-loading estimate rather than a complete radiative-transfer calculation.

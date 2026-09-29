@@ -20,11 +20,17 @@ jobs:
       - run: pytest -q
       - name: Build Furanodake terrain
         run: python -m pipeline.terrain.build_furanodake
+      - name: Export web terrain
+        run: python -m pipeline.terrain.export_web
       - name: Show acquisition metadata
         run: cat data/processed/furanodake/terrain/metadata.json
       - uses: actions/upload-artifact@v4
         with:
           name: furanodake-terrain-poc
-          path: data/processed/furanodake/terrain/
+          path: |
+            data/processed/furanodake/terrain/
+            web/index.html
+            web/README.md
+            web/data/
           if-no-files-found: error
           retention-days: 7

@@ -7,6 +7,7 @@ on:
       - prototype/furanodake-poc
     paths:
       - "config/furanodake-weather.json"
+      - "config/furanodake.json"
       - "config/furanodake-features.json"
       - "pipeline/landcover/**"
       - "pipeline/weather/**"

@@ -1,0 +1,117 @@
+name: Historical Weather POC
+# Pages deployment enabled
+
+on:
+  push:
+    branches:
+      - prototype/furanodake-poc
+    paths:
+      - "config/furanodake-weather.json"
+      - "config/furanodake.json"
+      - "config/furanodake-features.json"
+      - "pipeline/landcover/**"
+      - "pipeline/weather/**"
+      - "pipeline/terrain/**"
+      - "tests/test_weather.py"
+      - "pyproject.toml"
+      - "web/**"
+      - ".github/workflows/historical-weather-poc.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "snowpack-pages"
+  cancel-in-progress: true
+
+jobs:
+  build-historical-weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: pytest -q
+      - name: Build terrain dependency
+        run: python -m pipeline.terrain.build_furanodake
+      - name: Probe DEM1A coverage
+        run: python -m pipeline.terrain.probe_dem1a
+      - name: Build historical weather forcing
+        run: python -m pipeline.weather.build_historical_forcing
+      - name: Export terrain for viewer
+        run: python -m pipeline.terrain.export_web
+      - name: Export terrain labels
+        run: python -m pipeline.terrain.export_features
+      - name: Export forest cover for viewer
+        run: python -m pipeline.landcover.worldcover
+      - name: Export historical weather for viewer
+        run: python -m pipeline.weather.export_web
+      - name: Validate viewer JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path("web/index.html").read_text()
+          matches = re.findall(r'<script type="module">(.*?)</script>', html, re.S)
+          if len(matches) != 1:
+              raise SystemExit(f"Expected one module script, found {len(matches)}")
+          Path("/tmp/snowpack-viewer.mjs").write_text(matches[0])
+          PY
+          node --check /tmp/snowpack-viewer.mjs
+      - name: Validate browser weather metadata
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("web/data/weather-meta.json")
+          json.loads(
+              path.read_text(),
+              parse_constant=lambda value: (_ for _ in ()).throw(
+                  ValueError(f"Non-standard JSON value: {value}")
+              ),
+          )
+          print("weather-meta.json is strict JSON")
+          PY
+      - name: Show hourly forcing summary
+        run: |
+          head -n 8 data/processed/furanodake/weather/2025-12-29_2026-01-03/forcing-summary.csv
+          tail -n 8 data/processed/furanodake/weather/2025-12-29_2026-01-03/forcing-summary.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: furanodake-historical-weather-poc
+          path: |
+            data/processed/furanodake/weather/2025-12-29_2026-01-03/
+            data/processed/furanodake/terrain/metadata.json
+            web/index.html
+            web/README.md
+            web/data/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Prepare Pages site
+        run: touch web/.nojekyll
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web
+
+  deploy-pages:
+    needs: build-historical-weather
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

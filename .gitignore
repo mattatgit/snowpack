@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Local/raw data
+data/raw/
+data/interim/
+data/processed/
+
+# Raster / scientific outputs
+*.tif
+*.tiff
+*.nc
+*.grib
+*.grb
+*.grb2
+*.zarr/
+*.npy
+*.npz
+
+# Web
+node_modules/
+dist/
+
+# Generated viewer data
+web/data/

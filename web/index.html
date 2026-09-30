@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snowpack — Furanodake POC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; font-family: "Inter Tight", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b0d0e; color: #eceeee; overflow: hidden; }
+    #app { position: relative; width: 100vw; height: 100vh; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .panel { position: absolute; left: 18px; top: 18px; z-index: 5; width: min(390px, calc(100vw - 36px)); padding: 14px 15px; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; background: rgba(15,18,19,.90); backdrop-filter: blur(11px); }
+    h1 { margin: 0 0 4px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+    .sub { margin: 0 0 13px; color: #aeb4b6; font-size: 12px; line-height: 1.4; }
+    .row { display: grid; grid-template-columns: 94px 1fr; gap: 10px; align-items: center; margin: 9px 0; font-size: 12px; }
+    .time-row { display: none; }
+    .time-row.visible { display: grid; }
+    select, input { width: 100%; font: inherit; }
+    select { min-height: 34px; padding: 4px 8px; color: inherit; background: #191c1e; border: 1px solid #404548; border-radius: 7px; }
+    input[type="range"] { accent-color: #dce1e2; }
+    input[type="checkbox"] { width: 17px; height: 17px; justify-self: start; accent-color: #dce1e2; }
+    #timeLabel { margin: -3px 0 3px 104px; min-height: 16px; color: #d6d9da; font-size: 11px; }
+    #status { margin-top: 10px; color: #aeb3b5; font-size: 11px; line-height: 1.5; }
+    .legend { margin-top: 10px; display: none; }
+    .legend.visible { display: block; }
+    .bar { height: 7px; border-radius: 999px; }
+    .terrain-bar { background: linear-gradient(90deg,#27323b,#62727b,#d3cebd,#f0f0ed); }
+    .slope-bar { background: linear-gradient(90deg,#27312d,#827c51,#bc6e42,#e4d6cd); }
+    .aspect-bar { background: linear-gradient(90deg,#d85f5f,#d4c958,#60b17d,#5b8fd0,#d85f5f); }
+    .temperature-bar { background: linear-gradient(90deg,#212653,#365f9d,#77bad0,#e8e1cf); }
+    .snowfall-bar { background: linear-gradient(90deg,#202426,#596f80,#bfd7e5,#ffffff); }
+    .snow-age-bar { background: linear-gradient(90deg,#ff8a18,#ef2738,#d72f85,#7a3fd2,#2864e8,#27b8d5); }
+    .wind-bar { background: linear-gradient(90deg,#27302f,#6d8177,#b7a15f,#e6d2bf); }
+    .solar-bar { background: linear-gradient(90deg,#25282c,#555e62,#b9a65e,#ffe394); }
+    .labels { display:flex; justify-content:space-between; margin-top:4px; color:#969c9f; font-size:10px; }
+    .notice { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.1); color:#949b9e; font-size:10px; line-height:1.4; display:none; }
+    .notice.visible { display:block; }
+    .attribution { position:absolute; right:12px; bottom:10px; max-width:min(650px, calc(100vw - 24px)); color:#969da0; font-size:10px; text-align:right; z-index:4; text-shadow:0 1px 2px #000; }
+    .error { color:#efb1a8 !important; }
+
+    #featureLabels { position:absolute; inset:0; z-index:3; pointer-events:none; overflow:hidden; }
+    .map-label { position:absolute; transform:translate(-50%,-100%); white-space:nowrap; color:rgba(247,248,248,.94); font-family:"Inter Tight",sans-serif; font-size:12px; font-weight:500; letter-spacing:.005em; text-shadow:0 1px 3px #000,0 0 7px #000; }
+    .map-label.summit { font-weight:600; }
+    .map-label .dot { display:block; width:5px; height:5px; margin:4px auto 0; border-radius:50%; background:rgba(255,255,255,.88); box-shadow:0 0 4px #000; }
+    .map-label.approximate { color:rgba(228,232,233,.82); }
+
+    #compass { position:absolute; right:18px; top:18px; z-index:4; width:84px; height:84px; border:1px solid rgba(255,255,255,.18); border-radius:50%; background:rgba(15,18,19,.64); backdrop-filter:blur(8px); pointer-events:none; }
+    #compass::before { content:""; position:absolute; left:50%; top:4px; margin-left:-3px; width:0; height:0; border-left:3px solid transparent; border-right:3px solid transparent; border-bottom:8px solid rgba(255,255,255,.78); }
+    #compass::after { content:""; position:absolute; width:4px; height:4px; border-radius:50%; background:#dfe3e4; left:50%; top:50%; transform:translate(-50%,-50%); opacity:.7; }
+    .cardinal { position:absolute; left:50%; top:50%; width:20px; margin-left:-10px; margin-top:-7px; text-align:center; font-size:10px; font-weight:600; color:#dce0e1; transform-origin:center; }
+    .cardinal.n { color:#fff; }
+
+    @media (max-width: 620px) {
+      .panel { top: 10px; left: 10px; width: calc(100vw - 20px); }
+      .row { grid-template-columns: 82px 1fr; }
+      #timeLabel { margin-left: 92px; }
+      #compass { right:10px; bottom:10px; top:auto; width:72px; height:72px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="featureLabels"></div>
+  <div id="compass">
+    <span class="cardinal n" data-bearing="0">N</span>
+    <span class="cardinal" data-bearing="90">E</span>
+    <span class="cardinal" data-bearing="180">S</span>
+    <span class="cardinal" data-bearing="270">W</span>
+  </div>
+
+  <div class="panel">
+    <h1>Furanodake</h1>
+    <p class="sub">Terrain + historical weather forcing POC. Drag to rotate, scroll/pinch to zoom, right-drag to pan.</p>
+
+    <label class="row"><span>Layer</span><select id="layer">
+      <option value="terrain">Terrain</option>
+      <option value="slope">Slope</option>
+      <option value="aspect">Aspect</option>
+      <option value="snowage" disabled>Recent snow age — loading…</option>
+      <option value="snowfall" disabled>Hourly snowfall — loading…</option>
+      <option value="temperature" disabled>Temperature — loading…</option>
+      <option value="wind" disabled>Wind speed — loading…</option>
+      <option value="solar" disabled>Solar loading — loading…</option>
+    </select></label>
+
+    <label class="row"><span>Trees</span><input id="treesToggle" type="checkbox" checked></label>
+    <label class="row"><span>Vertical</span><input id="exaggeration" type="range" min="0.5" max="2.5" value="1.15" step="0.05"></label>
+    <label id="timeRow" class="row time-row"><span>Time</span><input id="time" type="range" min="0" max="143" value="83" step="1"></label>
+    <div id="timeLabel"></div>
+
+    <div id="terrainLegend" class="legend visible"><div class="bar terrain-bar"></div><div class="labels"><span>low</span><span>elevation</span><span>high</span></div></div>
+    <div id="slopeLegend" class="legend"><div class="bar slope-bar"></div><div class="labels"><span>0°</span><span>30°</span><span>60°+</span></div></div>
+    <div id="aspectLegend" class="legend"><div class="bar aspect-bar"></div><div class="labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div></div>
+    <div id="snowageLegend" class="legend"><div class="bar snow-age-bar"></div><div class="labels"><span>new</span><span>12h</span><span>24h</span><span>48h</span></div></div>
+    <div id="snowfallLegend" class="legend"><div class="bar snowfall-bar"></div><div class="labels"><span>0</span><span>2</span><span>4+ mm SWE/h</span></div></div>
+    <div id="temperatureLegend" class="legend"><div class="bar temperature-bar"></div><div class="labels"><span>−25°C</span><span>−12°C</span><span>0°C</span></div></div>
+    <div id="windLegend" class="legend"><div class="bar wind-bar"></div><div class="labels"><span>0</span><span>7.5</span><span>15+ m/s</span></div></div>
+    <div id="solarLegend" class="legend"><div class="bar solar-bar"></div><div class="labels"><span>0</span><span>400</span><span>800+ W/m²</span></div></div>
+
+    <div id="status">Loading terrain…</div>
+    <div id="snowNotice" class="notice">Snow colour is a visualisation of recent modelled snowfall forcing, not observed surface snow. Hue shows snowfall age over the previous 48 hours; colour strength reflects amount.</div>
+    <div id="windNotice" class="notice">Wind is low-confidence in this v0: AMeDAS valley winds are elevation-adjusted but do not yet represent free-air/ridge flow or terrain acceleration/shelter.</div>
+    <div id="solarNotice" class="notice">Solar is relative terrain loading: slope/aspect + solar geometry + JMA sunshine fraction. Terrain-horizon shading and full radiation physics are not yet included.</div>
+  </div>
+
+  <div id="attribution" class="attribution"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const BUILD_ID = 'furanodake-focus-20260930-1';
+const status = document.querySelector('#status');
+const app = document.querySelector('#app');
+const layerSelect = document.querySelector('#layer');
+const exaggeration = document.querySelector('#exaggeration');
+const treesToggle = document.querySelector('#treesToggle');
+const timeSlider = document.querySelector('#time');
+const timeRow = document.querySelector('#timeRow');
+const timeLabel = document.querySelector('#timeLabel');
+const featureLabelsRoot = document.querySelector('#featureLabels');
+const windNotice = document.querySelector('#windNotice');
+const solarNotice = document.querySelector('#solarNotice');
+const snowNotice = document.querySelector('#snowNotice');
+const cardinalNodes = [...document.querySelectorAll('.cardinal')];
+const legends = Object.fromEntries(
+  ['terrain','slope','aspect','snowage','snowfall','temperature','wind','solar'].map(function(name) {
+    return [name, document.querySelector('#' + name + 'Legend')];
+  })
+);
+const weatherLayers = new Set(['snowage','snowfall','temperature','wind','solar']);
+
+async function loadJSON(url) {
+  const response = await fetch(url + '?v=' + BUILD_ID, {cache:'no-store'});
+  if (!response.ok) throw new Error(url + ': HTTP ' + response.status);
+  return response.json();
+}
+async function loadFloat32(url) {
+  const response = await fetch(url + '?v=' + BUILD_ID, {cache:'no-store'});
+  if (!response.ok) throw new Error(url + ': HTTP ' + response.status);
+  return new Float32Array(await response.arrayBuffer());
+}
+async function loadUint8(url) {
+  const response = await fetch(url + '?v=' + BUILD_ID, {cache:'no-store'});
+  if (!response.ok) throw new Error(url + ': HTTP ' + response.status);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function clamp01(value) { return Math.min(Math.max(value,0),1); }
+function mix(a,b,t) { return a.map(function(v,i) { return v + (b[i]-v)*t; }); }
+function interpolateStops(t,stops) {
+  t=clamp01(t);
+  for (let i=1;i<stops.length;i++) {
+    if (t<=stops[i][0]) {
+      const a=stops[i-1][0], ca=stops[i-1][1], b=stops[i][0], cb=stops[i][1];
+      const f=(t-a)/(b-a || 1);
+      return ca.map(function(v,j) { return v+(cb[j]-v)*f; });
+    }
+  }
+  return stops[stops.length-1][1];
+}
+function terrainColor(t) { return interpolateStops(t, [[0,[.15,.19,.23]],[.38,[.34,.43,.49]],[.72,[.73,.70,.61]],[1,[.94,.94,.91]]]); }
+function slopeColor(v) { return interpolateStops(v/60, [[0,[.15,.19,.17]],[.5,[.51,.48,.30]],[.78,[.73,.39,.20]],[1,[.89,.83,.79]]]); }
+function aspectColor(deg) { const c=new THREE.Color().setHSL((((deg%360)+360)%360)/360,.48,.58); return [c.r,c.g,c.b]; }
+function temperatureColor(v) { return interpolateStops((v+25)/25, [[0,[.13,.16,.34]],[.5,[.22,.45,.65]],[.78,[.48,.74,.81]],[1,[.91,.88,.81]]]); }
+function snowfallColor(v) { return interpolateStops(v/4, [[0,[.12,.14,.15]],[.35,[.27,.39,.48]],[.7,[.67,.82,.89]],[1,[1,1,1]]]); }
+function windColor(v) { return interpolateStops(v/15, [[0,[.14,.18,.17]],[.5,[.42,.51,.46]],[.8,[.70,.60,.32]],[1,[.90,.82,.74]]]); }
+function solarColor(v) { return interpolateStops(v/800, [[0,[.14,.15,.17]],[.45,[.32,.36,.38]],[.75,[.65,.57,.29]],[1,[1,.86,.49]]]); }
+function snowAgeColor(ageHours) {
+  if (!Number.isFinite(ageHours) || ageHours>48) return [0.20,0.23,0.25];
+  const t=ageHours/48;
+  return interpolateStops(t,[
+    [0.00,[1.00,.50,.06]],
+    [0.10,[.95,.13,.18]],
+    [0.23,[.87,.12,.45]],
+    [0.42,[.52,.20,.83]],
+    [0.68,[.14,.39,.90]],
+    [1.00,[.10,.72,.84]]
+  ]);
+}
+function recentSnowColor(age,total,base) {
+  if (!Number.isFinite(total) || total<0.03) return mix(base,[.15,.17,.18],.18);
+  const snow=snowAgeColor(age);
+  const strength=clamp01(total/7.0);
+  return mix(base,snow,.30+.68*strength);
+}
+
+function setGeometryColors(geometry,count,colorAt) {
+  const colors=geometry.getAttribute('color').array;
+  for (let i=0;i<count;i++) {
+    const rgb=colorAt(i);
+    colors[i*3]=rgb[0]; colors[i*3+1]=rgb[1]; colors[i*3+2]=rgb[2];
+  }
+  geometry.getAttribute('color').needsUpdate=true;
+}
+function formatTime(iso) {
+  const date=new Date(iso);
+  return new Intl.DateTimeFormat('en-AU',{
+    timeZone:'Asia/Tokyo', day:'numeric', month:'short',
+    hour:'2-digit', minute:'2-digit', hour12:false
+  }).format(date)+' JST';
+}
+function cardinal(deg) {
+  if (!Number.isFinite(deg)) return 'calm/variable';
+  const names=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return names[Math.round(deg/22.5)%16];
+}
+function deterministicNoise(a,b) {
+  const value=Math.sin(a*12.9898+b*78.233)*43758.5453;
+  return value-Math.floor(value);
+}
+
+function solarPositionJST(iso,latitudeDeg,longitudeDeg) {
+  const absolute=new Date(iso);
+  const jst=new Date(absolute.getTime()+9*3600*1000);
+  const year=jst.getUTCFullYear();
+  const start=Date.UTC(year,0,0);
+  const day=Math.floor((jst.getTime()-start)/86400000);
+  const hour=jst.getUTCHours()+jst.getUTCMinutes()/60+jst.getUTCSeconds()/3600;
+  const gamma=2*Math.PI/365*(day-1+(hour-12)/24);
+  const equation=229.18*(0.000075+0.001868*Math.cos(gamma)-0.032077*Math.sin(gamma)-0.014615*Math.cos(2*gamma)-0.040849*Math.sin(2*gamma));
+  const declination=0.006918-0.399912*Math.cos(gamma)+0.070257*Math.sin(gamma)-0.006758*Math.cos(2*gamma)+0.000907*Math.sin(2*gamma)-0.002697*Math.cos(3*gamma)+0.00148*Math.sin(3*gamma);
+  const trueSolarMinutes=hour*60+equation+4*longitudeDeg-60*9;
+  const hourAngle=(trueSolarMinutes/4-180)*Math.PI/180;
+  const latitude=latitudeDeg*Math.PI/180;
+  const sinAltitude=Math.sin(latitude)*Math.sin(declination)+Math.cos(latitude)*Math.cos(declination)*Math.cos(hourAngle);
+  const altitude=Math.asin(Math.max(-1,Math.min(1,sinAltitude)));
+  let azimuth=Math.atan2(
+    Math.sin(hourAngle),
+    Math.cos(hourAngle)*Math.sin(latitude)-Math.tan(declination)*Math.cos(latitude)
+  );
+  azimuth=(azimuth+Math.PI)%(2*Math.PI);
+  return {altitude:altitude,azimuth:azimuth};
+}
+
+try {
+  const terrainLoads=await Promise.all([
+    loadJSON('./data/terrain-meta.json'),
+    loadFloat32('./data/elevation.bin'),
+    loadFloat32('./data/slope.bin'),
+    loadFloat32('./data/aspect.bin')
+  ]);
+  const meta=terrainLoads[0], elevation=terrainLoads[1], slope=terrainLoads[2], aspect=terrainLoads[3];
+  const terrainCount=meta.width*meta.height;
+  if ([elevation.length,slope.length,aspect.length].some(function(n){return n!==terrainCount;})) throw new Error('Terrain data size mismatch');
+
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x111416);
+  const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,10,50000);
+  const renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.outputColorSpace=THREE.SRGBColorSpace;
+  app.prepend(renderer.domElement);
+
+  const widthM=meta.east_m-meta.west_m;
+  const heightM=meta.north_m-meta.south_m;
+  const centreX=(meta.east_m+meta.west_m)/2;
+  const centreY=(meta.north_m+meta.south_m)/2;
+  const minE=meta.elevation_min_m, maxE=meta.elevation_max_m;
+
+  const positions=new Float32Array(terrainCount*3);
+  const colors=new Float32Array(terrainCount*3);
+  for (let row=0;row<meta.height;row++) {
+    for (let col=0;col<meta.width;col++) {
+      const i=row*meta.width+col, p=i*3;
+      positions[p]=(col/(meta.width-1)-.5)*widthM;
+      positions[p+1]=elevation[i]-minE;
+      positions[p+2]=(row/(meta.height-1)-.5)*heightM;
+    }
+  }
+  const indices=new Uint32Array((meta.width-1)*(meta.height-1)*6);
+  let k=0;
+  for (let row=0;row<meta.height-1;row++) {
+    for (let col=0;col<meta.width-1;col++) {
+      const a=row*meta.width+col,b=a+1,c=a+meta.width,d=c+1;
+      indices[k++]=a; indices[k++]=c; indices[k++]=b;
+      indices[k++]=b; indices[k++]=c; indices[k++]=d;
+    }
+  }
+  const terrainGeometry=new THREE.BufferGeometry();
+  terrainGeometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  terrainGeometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  terrainGeometry.setIndex(new THREE.BufferAttribute(indices,1));
+  terrainGeometry.computeVertexNormals();
+
+  const terrainMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.94,metalness:.015,side:THREE.DoubleSide});
+  const terrainMesh=new THREE.Mesh(terrainGeometry,terrainMaterial);
+  scene.add(terrainMesh);
+
+  // Keep scene illumination fixed while the time scrubber moves through the day.
+  // The yellow sun remains a time/orientation cue only.
+  const ambient=new THREE.AmbientLight(0xffffff,.42);
+  scene.add(ambient);
+  const hemi=new THREE.HemisphereLight(0xf0f6f7,0x5e625f,1.65);
+  scene.add(hemi);
+  const sunLight=new THREE.DirectionalLight(0xfff4dc,2.35);
+  sunLight.position.set(-3200,5200,4200);
+  const sunTarget=new THREE.Object3D();
+  sunTarget.position.set(0,(maxE-minE)*.28,0);
+  scene.add(sunTarget);
+  sunLight.target=sunTarget;
+  scene.add(sunLight);
+  const sunSphere=new THREE.Mesh(
+    new THREE.SphereGeometry(92,20,12),
+    new THREE.MeshBasicMaterial({color:0xffd94d})
+  );
+  sunSphere.visible=false;
+  scene.add(sunSphere);
+
+  const sceneSpan=Math.max(widthM,heightM);
+  scene.fog=new THREE.Fog(0x111416,sceneSpan*1.8,sceneSpan*4.5);
+  camera.position.set(-sceneSpan*.92,sceneSpan*.68,sceneSpan*.98);
+  const controls=new OrbitControls(camera,renderer.domElement);
+  controls.target.set(0,(maxE-minE)*.34,0);
+  controls.enableDamping=true;
+  controls.dampingFactor=.07;
+  controls.minDistance=sceneSpan*.28;
+  controls.maxDistance=sceneSpan*4.0;
+  controls.maxPolarAngle=Math.PI*.49;
+
+  let treeMesh=null;
+  let forestAttribution='';
+  let featureLabels=[];
+  let weather=null;
+  let weatherMap=null;
+  let snowCache=null;
+  let windLines=null;
+  let windAnchors=[];
+  const windPositionArray=new Float32Array(6*160);
+  const windGeometry=new THREE.BufferGeometry();
+  windGeometry.setAttribute('position',new THREE.BufferAttribute(windPositionArray,3));
+  const windMaterial=new THREE.LineBasicMaterial({color:0xe5f0f3,transparent:true,opacity:.52});
+  windLines=new THREE.LineSegments(windGeometry,windMaterial);
+  windLines.visible=false;
+  scene.add(windLines);
+
+  const weatherSpecs={
+    temperature:{label:'Temperature',files:{temperature:'./data/weather-temperature.bin'}},
+    snowfall:{label:'Hourly snowfall',files:{snowfall:'./data/weather-snowfall-water.bin'}},
+    snowage:{label:'Recent snow age',files:{snowfall:'./data/weather-snowfall-water.bin'}},
+    wind:{label:'Wind speed',files:{windSpeed:'./data/weather-wind-speed.bin',windDirection:'./data/weather-wind-direction.bin'}},
+    solar:{label:'Solar loading',files:{shortwave:'./data/weather-shortwave.bin'}}
+  };
+
+  function updateStaticColors(layer) {
+    setGeometryColors(terrainGeometry,terrainCount,function(i) {
+      if (layer==='slope') return slopeColor(slope[i]);
+      if (layer==='aspect') return aspectColor(aspect[i]);
+      return terrainColor((elevation[i]-minE)/(maxE-minE));
+    });
+  }
+  updateStaticColors('terrain');
+
+  function buildWeatherMap(weatherMeta) {
+    const i00=new Int32Array(terrainCount);
+    const i10=new Int32Array(terrainCount);
+    const i01=new Int32Array(terrainCount);
+    const i11=new Int32Array(terrainCount);
+    const fx=new Float32Array(terrainCount);
+    const fy=new Float32Array(terrainCount);
+    const bounds=weatherMeta.bounds_m;
+    const res=weatherMeta.render_resolution_m;
+
+    for (let row=0;row<meta.height;row++) {
+      const projectedY=meta.north_m-(row/(meta.height-1))*(meta.north_m-meta.south_m);
+      let wy=(bounds.north-projectedY)/res-.5;
+      wy=Math.min(Math.max(wy,0),weatherMeta.height-1.000001);
+      let y0=Math.floor(wy), y1=Math.min(y0+1,weatherMeta.height-1);
+      const yFrac=wy-y0;
+      for (let col=0;col<meta.width;col++) {
+        const i=row*meta.width+col;
+        const projectedX=meta.west_m+(col/(meta.width-1))*(meta.east_m-meta.west_m);
+        let wx=(projectedX-bounds.west)/res-.5;
+        wx=Math.min(Math.max(wx,0),weatherMeta.width-1.000001);
+        let x0=Math.floor(wx), x1=Math.min(x0+1,weatherMeta.width-1);
+        i00[i]=y0*weatherMeta.width+x0;
+        i10[i]=y0*weatherMeta.width+x1;
+        i01[i]=y1*weatherMeta.width+x0;
+        i11[i]=y1*weatherMeta.width+x1;
+        fx[i]=wx-x0;
+        fy[i]=yFrac;
+      }
+    }
+    return {i00:i00,i10:i10,i01:i01,i11:i11,fx:fx,fy:fy};
+  }
+
+  function mappedValue(array,offset,i) {
+    const x=weatherMap.fx[i], y=weatherMap.fy[i];
+    const a=array[offset+weatherMap.i00[i]];
+    const b=array[offset+weatherMap.i10[i]];
+    const c=array[offset+weatherMap.i01[i]];
+    const d=array[offset+weatherMap.i11[i]];
+    const top=a+(b-a)*x;
+    const bottom=c+(d-c)*x;
+    return top+(bottom-top)*y;
+  }
+
+  async function ensureWeatherLayer(layer) {
+    if (!weather || !weatherSpecs[layer]) return false;
+    const spec=weatherSpecs[layer];
+    const keys=Object.keys(spec.files);
+    const missing=keys.filter(function(key){return !weather.data[key];});
+    if (!missing.length) return true;
+
+    status.classList.remove('error');
+    status.textContent='Loading ' + spec.label.toLowerCase() + ' data…';
+
+    try {
+      await Promise.all(missing.map(async function(key) {
+        if (weather.loading[key]) {
+          await weather.loading[key];
+          return;
+        }
+        const promise=loadFloat32(spec.files[key]).then(function(array) {
+          const expected=weather.meta.width*weather.meta.height*weather.meta.hours;
+          if (array.length!==expected) throw new Error(key + ' size mismatch: expected ' + expected + ', got ' + array.length);
+          weather.data[key]=array;
+        }).finally(function(){delete weather.loading[key];});
+        weather.loading[key]=promise;
+        await promise;
+      }));
+      return true;
+    } catch (error) {
+      console.error(error);
+      status.classList.add('error');
+      status.textContent=spec.label + ' failed to load: ' + error.message;
+      return false;
+    }
+  }
+
+  function computeSnowWindow(t) {
+    if (snowCache && snowCache.t===t) return snowCache;
+    const snowfall=weather.data.snowfall;
+    const count=weather.meta.width*weather.meta.height;
+    const total=new Float32Array(count);
+    const weightedAge=new Float32Array(count);
+    const first=Math.max(0,t-47);
+    for (let h=first;h<=t;h++) {
+      const offset=h*count;
+      const age=t-h;
+      for (let i=0;i<count;i++) {
+        const amount=Math.max(0,snowfall[offset+i]);
+        total[i]+=amount;
+        weightedAge[i]+=amount*age;
+      }
+    }
+    const age=new Float32Array(count);
+    for (let i=0;i<count;i++) age[i]=total[i]>.0001 ? weightedAge[i]/total[i] : 999;
+    snowCache={t:t,total:total,age:age};
+    return snowCache;
+  }
+
+  function applyWeatherLayer(layer,t) {
+    const count=weather.meta.width*weather.meta.height;
+    const offset=t*count;
+    if (layer==='snowage') {
+      const stats=computeSnowWindow(t);
+      setGeometryColors(terrainGeometry,terrainCount,function(i) {
+        const age=mappedValue(stats.age,0,i);
+        const total=mappedValue(stats.total,0,i);
+        const base=terrainColor((elevation[i]-minE)/(maxE-minE));
+        return recentSnowColor(age,total,base);
+      });
+      return;
+    }
+
+    let array, colorFunction;
+    if (layer==='temperature') { array=weather.data.temperature; colorFunction=temperatureColor; }
+    else if (layer==='snowfall') { array=weather.data.snowfall; colorFunction=snowfallColor; }
+    else if (layer==='wind') { array=weather.data.windSpeed; colorFunction=windColor; }
+    else { array=weather.data.shortwave; colorFunction=solarColor; }
+
+    setGeometryColors(terrainGeometry,terrainCount,function(i) {
+      return colorFunction(mappedValue(array,offset,i));
+    });
+  }
+
+  function updateSun(t) {
+    if (!weather) return;
+    const study=meta.study;
+    const bbox=study.acquisition_bbox_wgs84;
+    const lat=(bbox[1]+bbox[3])/2;
+    const lon=(bbox[0]+bbox[2])/2;
+    const position=solarPositionJST(weather.meta.timestamps_end_jst[t],lat,lon);
+    const altitude=position.altitude, azimuth=position.azimuth;
+    const radius=Math.max(widthM,heightM)*1.55;
+    const horizontal=Math.cos(altitude)*radius;
+    const x=Math.sin(azimuth)*horizontal;
+    const z=-Math.cos(azimuth)*horizontal;
+    const y=(maxE-minE)*.35+Math.sin(altitude)*radius;
+    sunSphere.position.set(x,y,z);
+    sunSphere.visible=altitude>0;
+    sunSphere.material.color.setHex(0xffd84a);
+  }
+
+  function makeTreeMesh(mask) {
+    const stride=2;
+    let count=0;
+    for (let row=0;row<meta.height;row+=stride) {
+      for (let col=0;col<meta.width;col+=stride) {
+        if (mask[row*meta.width+col]) count++;
+      }
+    }
+    const geometry=new THREE.ConeGeometry(5.2,18,5);
+    geometry.translate(0,9,0);
+    const material=new THREE.MeshStandardMaterial({
+      color:0x65796d,
+      roughness:.96,
+      metalness:0,
+      emissive:0x18221d,
+      emissiveIntensity:.24
+    });
+    const mesh=new THREE.InstancedMesh(geometry,material,count);
+    const matrix=new THREE.Matrix4();
+    const quaternion=new THREE.Quaternion();
+    const scale=new THREE.Vector3();
+    let instance=0;
+    for (let row=0;row<meta.height;row+=stride) {
+      for (let col=0;col<meta.width;col+=stride) {
+        const i=row*meta.width+col;
+        if (!mask[i]) continue;
+        const x=(col/(meta.width-1)-.5)*widthM;
+        const z=(row/(meta.height-1)-.5)*heightM;
+        const y=elevation[i]-minE;
+        const n=deterministicNoise(row,col);
+        const heightScale=.65+n*.85;
+        quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),n*Math.PI*2);
+        scale.set(.7+n*.7,heightScale,.7+n*.7);
+        matrix.compose(new THREE.Vector3(x,y,z),quaternion,scale);
+        mesh.setMatrixAt(instance++,matrix);
+      }
+    }
+    mesh.instanceMatrix.needsUpdate=true;
+    mesh.frustumCulled=false;
+    return mesh;
+  }
+
+  async function loadForest() {
+    try {
+      const loads=await Promise.all([loadJSON('./data/forest-meta.json'),loadUint8('./data/forest-mask.bin')]);
+      const forestMeta=loads[0], mask=loads[1];
+      if (mask.length!==terrainCount) throw new Error('forest mask size mismatch');
+      treeMesh=makeTreeMesh(mask);
+      treeMesh.scale.y=Number(exaggeration.value);
+      treeMesh.visible=treesToggle.checked;
+      scene.add(treeMesh);
+      forestAttribution=forestMeta.attribution;
+      updateAttribution();
+    } catch (error) {
+      console.warn('Forest layer unavailable',error);
+      treesToggle.checked=false;
+      treesToggle.disabled=true;
+    }
+  }
+
+  async function loadFeatures() {
+    try {
+      const features=await loadJSON('./data/features.json');
+      featureLabels=features.map(function(feature) {
+        const element=document.createElement('div');
+        element.className='map-label ' + (feature.kind==='summit'?'summit ':'') + (feature.approximate?'approximate':'');
+        element.innerHTML='<span>' + feature.label + '</span><span class="dot"></span>';
+        featureLabelsRoot.appendChild(element);
+        return {feature:feature,element:element};
+      });
+    } catch (error) {
+      console.warn('Feature labels unavailable',error);
+    }
+  }
+
+  function updateFeatureLabels() {
+    const vertical=Number(exaggeration.value);
+    for (const item of featureLabels) {
+      const f=item.feature;
+      const point=new THREE.Vector3(
+        f.x_m-centreX,
+        (f.elevation_m-minE)*vertical+42,
+        centreY-f.y_m
+      );
+      point.project(camera);
+      if (point.z<-1 || point.z>1 || Math.abs(point.x)>1.15 || Math.abs(point.y)>1.15) {
+        item.element.style.display='none';
+        continue;
+      }
+      item.element.style.display='block';
+      const x=(point.x*.5+.5)*innerWidth;
+      const y=(-point.y*.5+.5)*innerHeight;
+      item.element.style.left=x+'px';
+      item.element.style.top=y+'px';
+    }
+  }
+
+  function updateCompass() {
+    const dx=camera.position.x-controls.target.x;
+    const dz=camera.position.z-controls.target.z;
+    const bearing=(Math.atan2(dx,-dz)*180/Math.PI+360)%360;
+    const heading=(bearing+180)%360;
+    const radius=29;
+    for (const node of cardinalNodes) {
+      const card=Number(node.dataset.bearing);
+      const angle=(card-heading)*Math.PI/180;
+      const x=Math.sin(angle)*radius;
+      const y=-Math.cos(angle)*radius;
+      node.style.transform='translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+    }
+  }
+
+  function buildWindAnchors() {
+    windAnchors=[];
+    const width=weather.meta.width, height=weather.meta.height;
+    const cols=14, rows=11;
+    const bounds=weather.meta.bounds_m, res=weather.meta.render_resolution_m;
+    for (let gy=1;gy<=rows;gy++) {
+      const row=Math.min(height-1,Math.round(gy*height/(rows+1)));
+      for (let gx=1;gx<=cols;gx++) {
+        const col=Math.min(width-1,Math.round(gx*width/(cols+1)));
+        const index=row*width+col;
+        const projectedX=bounds.west+(col+.5)*res;
+        const projectedY=bounds.north-(row+.5)*res;
+        windAnchors.push({
+          index:index,
+          x:projectedX-centreX,
+          z:centreY-projectedY,
+          y:weather.elevation[index]-minE+28,
+          speed:0,
+          direction:0,
+          phase:deterministicNoise(row,col)
+        });
+      }
+    }
+    windAnchors=windAnchors.slice(0,160);
+  }
+
+  function updateWindField(t) {
+    if (!weather || !weather.data.windSpeed || !weather.data.windDirection) return;
+    if (!windAnchors.length) buildWindAnchors();
+    const count=weather.meta.width*weather.meta.height;
+    const offset=t*count;
+    const fallback=weather.meta.summary[t].wind_direction_mean_deg;
+    for (const anchor of windAnchors) {
+      anchor.speed=weather.data.windSpeed[offset+anchor.index];
+      let direction=weather.data.windDirection[offset+anchor.index];
+      if (!Number.isFinite(direction)) direction=Number.isFinite(fallback)?fallback:0;
+      anchor.direction=direction;
+    }
+  }
+
+  function animateWind(dt) {
+    if (!windLines.visible || !windAnchors.length) return;
+    const pos=windGeometry.getAttribute('position').array;
+    const vertical=Number(exaggeration.value);
+    let p=0;
+    for (const anchor of windAnchors) {
+      const to=(anchor.direction+180)*Math.PI/180;
+      const dx=Math.sin(to);
+      const dz=-Math.cos(to);
+      const speed=Math.max(0,anchor.speed);
+      anchor.phase=(anchor.phase+dt*(.09+speed*.018))%1;
+      const track=280+speed*34;
+      const segment=55+speed*9;
+      const centre=(anchor.phase-.5)*track;
+      const a=centre-segment*.5;
+      const b=centre+segment*.5;
+      pos[p++]=anchor.x+dx*a;
+      pos[p++]=anchor.y*vertical;
+      pos[p++]=anchor.z+dz*a;
+      pos[p++]=anchor.x+dx*b;
+      pos[p++]=anchor.y*vertical;
+      pos[p++]=anchor.z+dz*b;
+    }
+    for (;p<pos.length;p++) pos[p]=0;
+    windGeometry.setDrawRange(0,windAnchors.length*2);
+    windGeometry.getAttribute('position').needsUpdate=true;
+  }
+
+  function updateAttribution() {
+    let text=meta.source_attribution + ' · Weather: JMA AMeDAS observations, modelled downscaling';
+    if (forestAttribution) text+=' · Forest: ' + forestAttribution;
+    document.querySelector('#attribution').textContent=text;
+  }
+  updateAttribution();
+
+  async function renderWeatherLayer() {
+    const layer=layerSelect.value;
+    if (!weatherLayers.has(layer) || !weather) return;
+    if (!await ensureWeatherLayer(layer)) return;
+    const t=Number(timeSlider.value);
+    applyWeatherLayer(layer,t);
+    updateSun(t);
+    windLines.visible=layer==='wind';
+    if (layer==='wind') updateWindField(t);
+
+    const summary=weather.meta.summary[t];
+    timeLabel.textContent=formatTime(weather.meta.timestamps_end_jst[t]);
+    status.classList.remove('error');
+    if (layer==='temperature') {
+      status.textContent='Mountain mean ' + summary.temperature_mean_c.toFixed(1) + '°C · range ' + summary.temperature_min_c.toFixed(1) + ' to ' + summary.temperature_max_c.toFixed(1) + '°C';
+    } else if (layer==='snowfall') {
+      status.textContent='Mean snowfall water ' + summary.snowfall_water_mean_mm.toFixed(2) + ' mm/h · precipitation ' + summary.precipitation_mean_mm.toFixed(2) + ' mm/h';
+    } else if (layer==='snowage') {
+      status.textContent='Recent snow: hue = weighted snowfall age over previous 48h · strength = accumulated snowfall amount';
+    } else if (layer==='wind') {
+      status.textContent='Mean wind ' + summary.wind_speed_mean_m_s.toFixed(1) + ' m/s from ' + cardinal(summary.wind_direction_mean_deg) + ' · animated streaks show modelled flow direction';
+    } else {
+      status.textContent='Mean slope-relative shortwave ' + summary.shortwave_mean_w_m2.toFixed(0) + ' W/m² · maximum ' + summary.shortwave_max_w_m2.toFixed(0) + ' W/m²';
+    }
+  }
+
+  async function updateLayer() {
+    const layer=layerSelect.value;
+    const isWeather=weatherLayers.has(layer);
+    timeRow.classList.toggle('visible',isWeather);
+    if (!isWeather) timeLabel.textContent='';
+    Object.entries(legends).forEach(function(entry) { entry[1].classList.toggle('visible',entry[0]===layer); });
+    windNotice.classList.toggle('visible',layer==='wind');
+    solarNotice.classList.toggle('visible',layer==='solar');
+    snowNotice.classList.toggle('visible',layer==='snowage');
+    windLines.visible=false;
+
+    if (isWeather) {
+      if (weather) await renderWeatherLayer();
+      else status.textContent='Loading weather metadata…';
+    } else {
+      updateStaticColors(layer);
+      status.classList.remove('error');
+      status.textContent=meta.width + ' × ' + meta.height + ' terrain render grid · ' + meta.resolution_m + ' m · source DEM5A 5 m · build ' + BUILD_ID;
+      if (weather) updateSun(Number(timeSlider.value));
+    }
+  }
+
+  function updateVertical() {
+    const value=Number(exaggeration.value);
+    terrainMesh.scale.y=value;
+    if (treeMesh) treeMesh.scale.y=value;
+  }
+
+  treesToggle.addEventListener('change',function(){ if(treeMesh) treeMesh.visible=treesToggle.checked; });
+  exaggeration.addEventListener('input',updateVertical);
+  layerSelect.addEventListener('change',function(){void updateLayer();});
+  timeSlider.addEventListener('input',function(){
+    snowCache=null;
+    if (weather) {
+      updateSun(Number(timeSlider.value));
+      void renderWeatherLayer();
+    }
+  });
+  updateVertical();
+
+  async function loadWeatherMetadata() {
+    const weatherMeta=await loadJSON('./data/weather-meta.json');
+    const weatherElevation=await loadFloat32('./data/weather-elevation.bin');
+    const count=weatherMeta.width*weatherMeta.height;
+    if (weatherElevation.length!==count) throw new Error('weather elevation size mismatch');
+    weather={meta:weatherMeta,elevation:weatherElevation,data:{},loading:{}};
+    weatherMap=buildWeatherMap(weatherMeta);
+    timeSlider.max=String(weatherMeta.hours-1);
+    timeSlider.value=String(Math.min(83,weatherMeta.hours-1));
+    Object.keys(weatherSpecs).forEach(function(value) {
+      const option=[...layerSelect.options].find(function(item){return item.value===value;});
+      if (option) { option.disabled=false; option.textContent=weatherSpecs[value].label; }
+    });
+    updateSun(Number(timeSlider.value));
+    status.textContent='Weather ready · ' + weatherMeta.hours + ' hours at ' + weatherMeta.render_resolution_m.toFixed(0) + ' m · select a weather layer · build ' + BUILD_ID;
+  }
+
+  await Promise.allSettled([loadForest(),loadFeatures()]);
+  loadWeatherMetadata().catch(function(error) {
+    console.error(error);
+    status.classList.add('error');
+    status.textContent='Terrain loaded; weather metadata failed: ' + error.message + ' · build ' + BUILD_ID;
+  });
+
+  addEventListener('resize',function(){
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+  });
+
+  const clock=new THREE.Clock();
+  function frame() {
+    const dt=Math.min(clock.getDelta(),.05);
+    controls.update();
+    updateFeatureLabels();
+    updateCompass();
+    animateWind(dt);
+    renderer.render(scene,camera);
+    requestAnimationFrame(frame);
+  }
+  frame();
+} catch (error) {
+  console.error(error);
+  status.classList.add('error');
+  status.textContent='Could not load terrain: ' + error.message + ' · build ' + BUILD_ID;
+}
+</script>
+</body>
+</html>

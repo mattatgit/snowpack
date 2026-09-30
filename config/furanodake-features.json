@@ -1,0 +1,38 @@
+[
+  {
+    "id": "furanodake",
+    "label": "Furanodake",
+    "label_ja": "富良野岳",
+    "lat": 43.393611,
+    "lon": 142.635000,
+    "kind": "summit",
+    "approximate": false
+  },
+  {
+    "id": "kamifuranodake",
+    "label": "Kamifuranodake",
+    "label_ja": "上富良野岳",
+    "lat": 43.402222,
+    "lon": 142.668056,
+    "kind": "summit",
+    "approximate": false
+  },
+  {
+    "id": "giant-ridge",
+    "label": "Giant Ridge",
+    "label_ja": "ジャイアント尾根",
+    "lat": 43.4025,
+    "lon": 142.6230,
+    "kind": "terrain",
+    "approximate": true
+  },
+  {
+    "id": "nishi-shamen",
+    "label": "West Face / Nishi-shamen",
+    "label_ja": "西斜面",
+    "lat": 43.4005,
+    "lon": 142.6180,
+    "kind": "terrain",
+    "approximate": true
+  }
+]

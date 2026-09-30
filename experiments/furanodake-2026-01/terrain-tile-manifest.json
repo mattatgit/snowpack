@@ -1,0 +1,30 @@
+{
+  "bbox_wgs84": [
+    142.58,
+    43.35,
+    142.7,
+    43.44
+  ],
+  "dem5": {
+    "zoom": 15,
+    "sources_in_priority_order": [
+      "dem5a_png",
+      "dem5b_png",
+      "dem5c_png"
+    ],
+    "xmin": 29361,
+    "xmax": 29372,
+    "ymin": 11985,
+    "ymax": 11996,
+    "tile_count": 144
+  },
+  "dem10_fallback": {
+    "zoom": 14,
+    "source": "dem_png",
+    "xmin": 14680,
+    "xmax": 14686,
+    "ymin": 5992,
+    "ymax": 5998,
+    "tile_count": 49
+  }
+}

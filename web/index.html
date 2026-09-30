@@ -122,7 +122,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const BUILD_ID = 'visual-v2-20260930-1';
+const BUILD_ID = 'furanodake-focus-20260930-1';
 const status = document.querySelector('#status');
 const app = document.querySelector('#app');
 const layerSelect = document.querySelector('#layer');
@@ -258,8 +258,7 @@ try {
   if ([elevation.length,slope.length,aspect.length].some(function(n){return n!==terrainCount;})) throw new Error('Terrain data size mismatch');
 
   const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x0b0d0e);
-  scene.fog=new THREE.Fog(0x0b0d0e,11500,24000);
+  scene.background=new THREE.Color(0x111416);
   const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,10,50000);
   const renderer=new THREE.WebGLRenderer({antialias:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -302,10 +301,16 @@ try {
   const terrainMesh=new THREE.Mesh(terrainGeometry,terrainMaterial);
   scene.add(terrainMesh);
 
-  const hemi=new THREE.HemisphereLight(0xdde5e8,0x302e2a,1.25);
+  // Keep scene illumination fixed while the time scrubber moves through the day.
+  // The yellow sun remains a time/orientation cue only.
+  const ambient=new THREE.AmbientLight(0xffffff,.42);
+  scene.add(ambient);
+  const hemi=new THREE.HemisphereLight(0xf0f6f7,0x5e625f,1.65);
   scene.add(hemi);
-  const sunLight=new THREE.DirectionalLight(0xfff3d1,1.7);
+  const sunLight=new THREE.DirectionalLight(0xfff4dc,2.35);
+  sunLight.position.set(-3200,5200,4200);
   const sunTarget=new THREE.Object3D();
+  sunTarget.position.set(0,(maxE-minE)*.28,0);
   scene.add(sunTarget);
   sunLight.target=sunTarget;
   scene.add(sunLight);
@@ -316,13 +321,15 @@ try {
   sunSphere.visible=false;
   scene.add(sunSphere);
 
-  camera.position.set(-8500,6400,8800);
+  const sceneSpan=Math.max(widthM,heightM);
+  scene.fog=new THREE.Fog(0x111416,sceneSpan*1.8,sceneSpan*4.5);
+  camera.position.set(-sceneSpan*.92,sceneSpan*.68,sceneSpan*.98);
   const controls=new OrbitControls(camera,renderer.domElement);
-  controls.target.set(0,(maxE-minE)*.32,0);
+  controls.target.set(0,(maxE-minE)*.34,0);
   controls.enableDamping=true;
   controls.dampingFactor=.07;
-  controls.minDistance=1800;
-  controls.maxDistance=26000;
+  controls.minDistance=sceneSpan*.28;
+  controls.maxDistance=sceneSpan*4.0;
   controls.maxPolarAngle=Math.PI*.49;
 
   let treeMesh=null;
@@ -490,23 +497,14 @@ try {
     const lon=(bbox[0]+bbox[2])/2;
     const position=solarPositionJST(weather.meta.timestamps_end_jst[t],lat,lon);
     const altitude=position.altitude, azimuth=position.azimuth;
-    const radius=9000;
+    const radius=Math.max(widthM,heightM)*1.55;
     const horizontal=Math.cos(altitude)*radius;
     const x=Math.sin(azimuth)*horizontal;
     const z=-Math.cos(azimuth)*horizontal;
     const y=(maxE-minE)*.35+Math.sin(altitude)*radius;
     sunSphere.position.set(x,y,z);
-    sunTarget.position.copy(controls.target);
-    sunLight.position.copy(sunSphere.position);
-
-    if (altitude>0) {
-      sunSphere.visible=true;
-      sunLight.intensity=1.1+1.7*Math.sin(altitude);
-      sunSphere.material.color.setHex(0xffd84a);
-    } else {
-      sunSphere.visible=false;
-      sunLight.intensity=.18;
-    }
+    sunSphere.visible=altitude>0;
+    sunSphere.material.color.setHex(0xffd84a);
   }
 
   function makeTreeMesh(mask) {
@@ -519,7 +517,13 @@ try {
     }
     const geometry=new THREE.ConeGeometry(5.2,18,5);
     geometry.translate(0,9,0);
-    const material=new THREE.MeshStandardMaterial({color:0x34433d,roughness:1,metalness:0});
+    const material=new THREE.MeshStandardMaterial({
+      color:0x65796d,
+      roughness:.96,
+      metalness:0,
+      emissive:0x18221d,
+      emissiveIntensity:.24
+    });
     const mesh=new THREE.InstancedMesh(geometry,material,count);
     const matrix=new THREE.Matrix4();
     const quaternion=new THREE.Quaternion();

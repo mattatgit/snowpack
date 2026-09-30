@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,34 @@ def block_mean(array: np.ndarray, factor: int) -> np.ndarray:
     raise ValueError("block_mean supports 2D or 3D arrays")
 
 
+def crop_slices(
+    transform: list[float],
+    width: int,
+    height: int,
+    bounds: dict[str, float],
+) -> tuple[slice, slice, dict[str, float]]:
+    cell_x = float(transform[0])
+    cell_y = abs(float(transform[4]))
+    origin_x = float(transform[2])
+    origin_y = float(transform[5])
+
+    col0 = max(0, int(math.floor((bounds["west"] - origin_x) / cell_x)))
+    col1 = min(width, int(math.ceil((bounds["east"] - origin_x) / cell_x)))
+    row0 = max(0, int(math.floor((origin_y - bounds["north"]) / cell_y)))
+    row1 = min(height, int(math.ceil((origin_y - bounds["south"]) / cell_y)))
+
+    if col1 <= col0 or row1 <= row0:
+        raise ValueError("viewer bounds do not intersect forcing grid")
+
+    actual = {
+        "west": origin_x + col0 * cell_x,
+        "east": origin_x + col1 * cell_x,
+        "north": origin_y - row0 * cell_y,
+        "south": origin_y - row1 * cell_y,
+    }
+    return slice(row0, row1), slice(col0, col1), actual
+
+
 def write_float32(path: Path, array: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(np.asarray(array, dtype="<f4").tobytes(order="C"))
@@ -40,17 +69,44 @@ def run(
     target_resolution_m: float,
 ) -> None:
     metadata = json.loads((forcing_root / "forcing-meta.json").read_text(encoding="utf-8"))
+    terrain_meta = json.loads(
+        (output_root / "data" / "terrain-meta.json").read_text(encoding="utf-8")
+    )
     source_resolution = float(metadata["grid"]["resolution_m"])
     factor = max(1, int(round(target_resolution_m / source_resolution)))
 
+    source_height = int(metadata["grid"]["height"])
+    source_width = int(metadata["grid"]["width"])
+    transform = metadata["grid"]["transform"]
+    viewer_bounds = {
+        "west": float(terrain_meta["west_m"]),
+        "south": float(terrain_meta["south_m"]),
+        "east": float(terrain_meta["east_m"]),
+        "north": float(terrain_meta["north_m"]),
+    }
+    row_slice, col_slice, cropped_bounds = crop_slices(
+        transform,
+        source_width,
+        source_height,
+        viewer_bounds,
+    )
+
     with np.load(forcing_root / "forcing-grid.npz") as data:
-        elevation = block_mean(data["elevation_m"], factor)
-        temperature = block_mean(data["temperature_c"], factor)
-        precipitation = block_mean(data["precipitation_mm"], factor)
-        snowfall = block_mean(data["snowfall_water_mm"], factor)
-        wind_u = block_mean(data["wind_u_m_s"], factor)
-        wind_v = block_mean(data["wind_v_m_s"], factor)
-        shortwave = block_mean(data["shortwave_w_m2"], factor)
+        elevation = block_mean(data["elevation_m"][row_slice, col_slice], factor)
+        temperature = block_mean(
+            data["temperature_c"][:, row_slice, col_slice], factor
+        )
+        precipitation = block_mean(
+            data["precipitation_mm"][:, row_slice, col_slice], factor
+        )
+        snowfall = block_mean(
+            data["snowfall_water_mm"][:, row_slice, col_slice], factor
+        )
+        wind_u = block_mean(data["wind_u_m_s"][:, row_slice, col_slice], factor)
+        wind_v = block_mean(data["wind_v_m_s"][:, row_slice, col_slice], factor)
+        shortwave = block_mean(
+            data["shortwave_w_m2"][:, row_slice, col_slice], factor
+        )
 
     wind_speed = np.hypot(wind_u, wind_v).astype(np.float32)
     wind_direction = (
@@ -70,18 +126,16 @@ def run(
     write_float32(data_root / "weather-shortwave.bin", shortwave)
 
     summary = pd.read_csv(forcing_root / "forcing-summary.csv")
-    transform = metadata["grid"]["transform"]
-    source_height = int(metadata["grid"]["height"])
-    source_width = int(metadata["grid"]["width"])
     height, width = elevation.shape
-    used_source_height = height * factor
-    used_source_width = width * factor
-    cell_x = float(transform[0])
-    cell_y = abs(float(transform[4]))
-    west = float(transform[2])
-    north = float(transform[5])
-    east = west + used_source_width * cell_x
-    south = north - used_source_height * cell_y
+    source_cell_x = float(transform[0])
+    source_cell_y = abs(float(transform[4]))
+    render_resolution_x = source_cell_x * factor
+    render_resolution_y = source_cell_y * factor
+
+    west = cropped_bounds["west"]
+    north = cropped_bounds["north"]
+    east = west + width * render_resolution_x
+    south = north - height * render_resolution_y
 
     web_meta = {
         "hours": int(temperature.shape[0]),
@@ -91,7 +145,7 @@ def run(
         "source_width": source_width,
         "source_height": source_height,
         "source_resolution_m": source_resolution,
-        "render_resolution_m": source_resolution * factor,
+        "render_resolution_m": (render_resolution_x + render_resolution_y) / 2.0,
         "bounds_m": {
             "west": west,
             "south": south,
@@ -104,14 +158,15 @@ def run(
             "shortwave": metadata["model"]["shortwave"]["warning"],
         },
         "source": "JMA AMeDAS observations downscaled over GSI terrain",
+        "cropped_to_viewer": True,
     }
     (data_root / "weather-meta.json").write_text(
         json.dumps(web_meta, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     print(
-        f"Exported {temperature.shape[0]} weather hours on "
-        f"{width} x {height} render grid at {source_resolution * factor:.1f} m"
+        f"Exported {temperature.shape[0]} weather hours on focused "
+        f"{width} x {height} render grid at ~{web_meta['render_resolution_m']:.1f} m"
     )
 
 

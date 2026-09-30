@@ -1,18 +1,57 @@
 {
   "name": "furanodake",
   "label": "Furanodake / Kamifuranodake",
-  "acquisition_bbox_wgs84": [142.58, 43.35, 142.70, 43.44],
-  "analysis_bbox_wgs84": [142.59, 43.36, 142.69, 43.43],
+  "acquisition_bbox_wgs84": [
+    142.58,
+    43.35,
+    142.7,
+    43.44
+  ],
+  "analysis_bbox_wgs84": [
+    142.59,
+    43.36,
+    142.69,
+    43.43
+  ],
   "target_crs": "EPSG:6680",
-  "target_resolution_m": 5.0,
+  "target_resolution_m": 5,
   "dem5_zoom": 15,
   "dem10_zoom": 14,
   "peaks": [
-    {"name": "Furanodake", "name_ja": "富良野岳", "lat": 43.393611, "lon": 142.635000, "elevation_m": 1912},
-    {"name": "Kamifuranodake", "name_ja": "上富良野岳", "lat": 43.402222, "lon": 142.668056, "elevation_m": 1893},
-    {"name": "Kamihorokamettoku-yama", "name_ja": "上ホロカメットク山", "lat": 43.405000, "lon": 142.671667, "elevation_m": 1920}
+    {
+      "name": "Furanodake",
+      "name_ja": "富良野岳",
+      "lat": 43.393611,
+      "lon": 142.635,
+      "elevation_m": 1912
+    },
+    {
+      "name": "Kamifuranodake",
+      "name_ja": "上富良野岳",
+      "lat": 43.402222,
+      "lon": 142.668056,
+      "elevation_m": 1893
+    },
+    {
+      "name": "Kamihorokamettoku-yama",
+      "name_ja": "上ホロカメットク山",
+      "lat": 43.405,
+      "lon": 142.671667,
+      "elevation_m": 1920
+    }
   ],
   "reference_points": [
-    {"name": "Tokachidake Onsen / Ryounkaku area", "name_ja": "十勝岳温泉", "lat": 43.413611, "lon": 142.643056}
+    {
+      "name": "Tokachidake Onsen / Ryounkaku area",
+      "name_ja": "十勝岳温泉",
+      "lat": 43.413611,
+      "lon": 142.643056
+    }
+  ],
+  "viewer_bbox_wgs84": [
+    142.607,
+    43.383,
+    142.657,
+    43.414
   ]
 }

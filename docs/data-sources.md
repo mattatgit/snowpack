@@ -10,18 +10,19 @@ Candidate source for:
 
 - DEM / elevation;
 - map reference data;
-- potentially 1 m, 5 m or 10 m terrain depending on local coverage.
+- 1 m, 5 m or 10 m terrain depending on local coverage.
 
 Official entry points:
 
 - https://www.gsi.go.jp/
 - https://service.gsi.go.jp/kiban/
 
-POC questions:
+Current POC result:
 
-- What is the highest-quality DEM available over the complete Furanodake/Kamifuranodake test extent?
-- Is the best source bare-earth LiDAR-derived DEM or photogrammetry?
-- What derived-data attribution is required?
+- GSI DEM5A covers the Furanodake study area and is the modelling terrain source;
+- DEM1A probes at the summit, study centre and four study-area corners all returned valid coverage;
+- the focused browser viewer now renders the DEM5A terrain at 5 m;
+- DEM1A should be tested later as a close-range level-of-detail source rather than implying 1 m weather/snow-model accuracy.
 
 ## Weather observations and forecasts
 
@@ -52,6 +53,23 @@ Likely POC use:
 - GSM only for longer-range trend guidance.
 
 Production access should use an appropriate supported distribution route rather than scrape presentation pages.
+
+### JMA Radar/Raingauge-Analyzed Precipitation (解析雨量)
+
+This is the preferred next upgrade to the historical precipitation field.
+
+JMA describes the product as a combination of weather radar and surface rain gauges, analysed as previous-one-hour precipitation on a 1 km grid over Japan. The standard analysis is produced every 30 minutes. The operational GRIB2 filename pattern is:
+
+`Z__C_RJTD_yyyyMMddhhmmss_SRF_GPV_Ggis1km_Prr60lv_ANAL_grib2.bin`
+
+Important implications for Snowpack:
+
+- it should provide much better storm-scale spatial structure than interpolation from three AMeDAS stations;
+- 1 km remains much coarser than the 5 m terrain, so fine-scale snow differences must come from terrain/elevation, precipitation-phase and later wind-redistribution modelling rather than pretending the observation itself is high resolution;
+- the analysed precipitation field can be downscaled onto the snow grid using terrain-aware modifiers while retaining the original 1 km provenance/confidence;
+- the standard analysed product should be preferred over the faster 10-minute preliminary analysis where historical accuracy matters, because the standard product uses more rain gauges.
+
+Historical access is a separate acquisition problem from the public presentation tiles. JMBSC documents archived analysed-precipitation datasets and JMA's cloud/data-distribution systems; these should be used rather than relying on undocumented tile scraping. For the 29 Dec 2025–3 Jan 2026 validation period we need to obtain the GRIB2 archive, crop the Hokkaido/Furanodake grid and compare it against the current AMeDAS-derived precipitation reconstruction.
 
 ## Avalanche / field observations
 
@@ -91,11 +109,13 @@ Important implementation questions:
 
 ## Vegetation / land cover
 
-Candidate sources:
+Current POC source:
 
-- Ministry of the Environment vegetation GIS;
-- MLIT land-use datasets;
-- possibly satellite-derived land cover.
+- ESA WorldCover 2021 v200, 10 m tree-cover class.
+
+Future candidate:
+
+- JAXA high-resolution land-cover products for Japan, which can distinguish forest types more usefully than a binary tree-cover mask.
 
 Use case:
 

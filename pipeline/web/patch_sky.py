@@ -25,8 +25,22 @@ def run(path: Path = HTML_PATH) -> None:
     text = replace_once(
         text,
         "const BUILD_ID='snow-heatmap-5m-20261009-2';",
-        "const BUILD_ID='snow-heatmap-5m-20261009-3';",
+        "const BUILD_ID='snow-heatmap-5m-20261009-4';",
         "build id",
+    )
+
+    text = replace_once(
+        text,
+        "body { margin: 0; background: #5599d6; color: #eceeee; overflow: hidden; }",
+        "body { margin: 0; background: #65a9dd; color: #eceeee; overflow: hidden; }",
+        "body sky fallback",
+    )
+
+    text = replace_once(
+        text,
+        "    #app { position: relative; width: 100vw; height: 100vh; }",
+        "    #app { position: relative; width: 100vw; height: 100vh; background:linear-gradient(to bottom,#2676c5 0%,#4f9ed8 48%,#9ac9e8 82%,#c0def0 100%); }",
+        "CSS sky gradient",
     )
 
     text = replace_once(
@@ -107,27 +121,36 @@ def run(path: Path = HTML_PATH) -> None:
 
     text = replace_once(
         text,
+        "  const renderer=new THREE.WebGLRenderer({antialias:true});",
+        "  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});",
+        "transparent renderer",
+    )
+
+    text = replace_once(
+        text,
+        "renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.96;app.prepend(renderer.domElement);",
+        "renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.96;renderer.setClearColor(0x000000,0);app.prepend(renderer.domElement);",
+        "transparent clear color",
+    )
+
+    text = replace_once(
+        text,
         "  const sky=new Sky();sky.scale.setScalar(450000);scene.add(sky);\n"
         "  const skyU=sky.material.uniforms;skyU.turbidity.value=.65;skyU.rayleigh.value=4.0;skyU.mieCoefficient.value=.00055;skyU.mieDirectionalG.value=.72;\n"
         "  const fixedSun=new THREE.Vector3();const phi=THREE.MathUtils.degToRad(34),theta=THREE.MathUtils.degToRad(205);fixedSun.setFromSphericalCoords(1,phi,theta);skyU.sunPosition.value.copy(fixedSun);\n"
         "  scene.fog=new THREE.Fog(0x79b3df,sceneSpan*2.25,sceneSpan*5.4);",
-        "  // Deliberately cosmetic bluebird sky: a controlled gradient rather than\n"
-        "  // an atmospheric model, so the mountain always has a readable blue backdrop.\n"
-        "  const skyGeometry=new THREE.SphereGeometry(sceneSpan*20,48,24);\n"
-        "  const skyMaterial=new THREE.ShaderMaterial({\n"
-        "    side:THREE.BackSide,depthWrite:false,fog:false,\n"
-        "    uniforms:{\n"
-        "      zenith:{value:new THREE.Color(0x2877c7)},\n"
-        "      horizon:{value:new THREE.Color(0x79b9e5)},\n"
-        "      lower:{value:new THREE.Color(0xa8d0ea)}\n"
-        "    },\n"
-        "    vertexShader:`varying float vSkyY; void main(){vSkyY=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,\n"
-        "    fragmentShader:`uniform vec3 zenith;uniform vec3 horizon;uniform vec3 lower;varying float vSkyY;void main(){float upper=smoothstep(-.06,.78,vSkyY);vec3 c=mix(horizon,zenith,upper);if(vSkyY<-.06)c=mix(lower,horizon,smoothstep(-.55,-.06,vSkyY));gl_FragColor=vec4(c,1.0);}`\n"
-        "  });\n"
-        "  skyMaterial.toneMapped=false;\n"
-        "  const skyDome=new THREE.Mesh(skyGeometry,skyMaterial);scene.add(skyDome);\n"
-        "  scene.fog=new THREE.Fog(0x79b9e5,sceneSpan*2.25,sceneSpan*5.4);",
-        "controlled sky dome",
+        "  // The sky is CSS behind a transparent WebGL canvas for consistent Safari/Chromium rendering.\n"
+        "  scene.background=null;\n"
+        "  scene.fog=new THREE.Fog(0xa9cee8,sceneSpan*2.6,sceneSpan*5.8);",
+        "CSS sky replacement",
+    )
+
+    text = replace_once(
+        text,
+        "  camera.position.set(-sceneSpan*.92,sceneSpan*.68,sceneSpan*.98);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,(maxE-minE)*.34,0);",
+        "  // Default view from north of the mountain, looking south across the main rideable faces.\n"
+        "  camera.position.set(-sceneSpan*.12,sceneSpan*.66,-sceneSpan*1.08);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,(maxE-minE)*.34,0);",
+        "south-facing default view",
     )
 
     text = replace_once(
@@ -138,7 +161,7 @@ def run(path: Path = HTML_PATH) -> None:
     )
 
     path.write_text(text, encoding="utf-8")
-    print("Applied controlled blue gradient sky, mobile accordion, and snow-motion caveat")
+    print("Applied CSS blue sky, south-facing default view, mobile accordion, and snow-motion caveat")
 
 
 if __name__ == "__main__":

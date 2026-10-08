@@ -25,7 +25,7 @@ def run(path: Path = HTML_PATH) -> None:
     text = replace_once(
         text,
         "const BUILD_ID='snow-heatmap-5m-20261009-2';",
-        "const BUILD_ID='snow-heatmap-5m-20261009-4';",
+        "const BUILD_ID='snow-heatmap-5m-20261009-5';",
         "build id",
     )
 
@@ -85,6 +85,35 @@ def run(path: Path = HTML_PATH) -> None:
         "accordion markup start",
     )
 
+    # The current slope/aspect/temperature renderers remain available internally for
+    # experiments, but they no longer occupy the primary viewer UI.
+    text = replace_once(
+        text,
+        "      <option value=\"slope\">Slope</option>\n",
+        "",
+        "slope option",
+    )
+    text = replace_once(
+        text,
+        "      <option value=\"aspect\">Aspect</option>\n",
+        "",
+        "aspect option",
+    )
+    text = replace_once(
+        text,
+        "      <option value=\"temperature\" disabled>Temperature — loading…</option>\n",
+        "",
+        "temperature option",
+    )
+
+    text = replace_once(
+        text,
+        "    <label class=\"row\"><span>Trees</span><input id=\"treesToggle\" type=\"checkbox\" checked></label>",
+        "    <label class=\"row\"><span>Trees</span><input id=\"treesToggle\" type=\"checkbox\" checked></label>\n"
+        "    <label class=\"row\"><span>Topo contours</span><input id=\"topoToggle\" type=\"checkbox\"></label>",
+        "topo contour toggle",
+    )
+
     text = replace_once(
         text,
         "    <div id=\"solarNotice\" class=\"notice\">Solar loading is modelled terrain exposure. The bluebird sky is deliberately cosmetic and does not represent historical weather.</div>\n  </div>\n  <div id=\"attribution\" class=\"attribution\"></div>",
@@ -104,6 +133,14 @@ def run(path: Path = HTML_PATH) -> None:
         "const panelToggle=document.querySelector('#panelToggle');\n"
         "const status=document.querySelector('#status');\n",
         "accordion JS controls",
+    )
+
+    text = replace_once(
+        text,
+        "const treesToggle=document.querySelector('#treesToggle');\n",
+        "const treesToggle=document.querySelector('#treesToggle');\n"
+        "const topoToggle=document.querySelector('#topoToggle');\n",
+        "topo toggle JS control",
     )
 
     text = replace_once(
@@ -147,6 +184,29 @@ def run(path: Path = HTML_PATH) -> None:
 
     text = replace_once(
         text,
+        "  const terrainMesh=new THREE.Mesh(terrainGeometry,terrainMaterial);scene.add(terrainMesh);",
+        "  const terrainMesh=new THREE.Mesh(terrainGeometry,terrainMaterial);scene.add(terrainMesh);\n"
+        "\n"
+        "  // DEM-derived topographic contours: 10 m minor contours, 50 m index contours.\n"
+        "  // This is a navigation/context overlay, not an official cartographic product.\n"
+        "  const contourGeometry=terrainGeometry.clone();\n"
+        "  const contourPos=contourGeometry.getAttribute('position').array;\n"
+        "  for(let i=1;i<contourPos.length;i+=3)contourPos[i]+=1.6;\n"
+        "  contourGeometry.getAttribute('position').needsUpdate=true;\n"
+        "  const contourMaterial=new THREE.ShaderMaterial({\n"
+        "    transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,toneMapped:false,\n"
+        "    uniforms:{elevationBase:{value:minE}},\n"
+        "    vertexShader:`uniform float elevationBase; varying float vElevation; void main(){vElevation=position.y+elevationBase;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,\n"
+        "    fragmentShader:`varying float vElevation;\n"
+        "      float contour(float interval,float thickness){float m=mod(vElevation,interval);float d=min(m,interval-m);float w=max(fwidth(vElevation)*thickness,.24);return 1.0-smoothstep(w,w*1.75,d);}\n"
+        "      void main(){float minor=contour(10.0,1.0);float major=contour(50.0,1.45);float a=max(minor*.34,major*.76);if(a<.015)discard;vec3 c=mix(vec3(.30,.26,.22),vec3(.12,.10,.08),major);gl_FragColor=vec4(c,a);}`\n"
+        "  });\n"
+        "  const contourMesh=new THREE.Mesh(contourGeometry,contourMaterial);contourMesh.visible=false;scene.add(contourMesh);",
+        "DEM contour overlay",
+    )
+
+    text = replace_once(
+        text,
         "  camera.position.set(-sceneSpan*.92,sceneSpan*.68,sceneSpan*.98);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,(maxE-minE)*.34,0);",
         "  // Default view from north of the mountain, looking south across the main rideable faces.\n"
         "  camera.position.set(-sceneSpan*.12,sceneSpan*.66,-sceneSpan*1.08);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,(maxE-minE)*.34,0);",
@@ -160,8 +220,22 @@ def run(path: Path = HTML_PATH) -> None:
         "snow motion caveat",
     )
 
+    text = replace_once(
+        text,
+        "  function updateVertical(){const v=Number(exaggeration.value);terrainMesh.scale.y=v;overlayMesh.scale.y=v;if(treeMesh)treeMesh.scale.y=v;verticalValue.textContent=v.toFixed(2).replace(/0+$/,'').replace(/\\.$/,'')+'×';}",
+        "  function updateVertical(){const v=Number(exaggeration.value);terrainMesh.scale.y=v;overlayMesh.scale.y=v;contourMesh.scale.y=v;if(treeMesh)treeMesh.scale.y=v;verticalValue.textContent=v.toFixed(2).replace(/0+$/,'').replace(/\\.$/,'')+'×';}",
+        "contour vertical scaling",
+    )
+
+    text = replace_once(
+        text,
+        "  treesToggle.addEventListener('change',()=>{if(treeMesh)treeMesh.visible=treesToggle.checked;});exaggeration.addEventListener('input',updateVertical);verticalReset.addEventListener('click',()=>{exaggeration.value='1.0';updateVertical();});",
+        "  treesToggle.addEventListener('change',()=>{if(treeMesh)treeMesh.visible=treesToggle.checked;});topoToggle.addEventListener('change',()=>{contourMesh.visible=topoToggle.checked;});exaggeration.addEventListener('input',updateVertical);verticalReset.addEventListener('click',()=>{exaggeration.value='1.0';updateVertical();});",
+        "topo contour toggle behaviour",
+    )
+
     path.write_text(text, encoding="utf-8")
-    print("Applied CSS blue sky, south-facing default view, mobile accordion, and snow-motion caveat")
+    print("Applied CSS blue sky, south-facing default view, mobile accordion, simplified layer UI, and DEM topo contours")
 
 
 if __name__ == "__main__":

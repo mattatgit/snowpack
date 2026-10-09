@@ -48,6 +48,8 @@ jobs:
         run: python -m pipeline.weather.build_historical_forcing
       - name: Export terrain for viewer
         run: python -m pipeline.terrain.export_web
+      - name: Export progressive terrain LOD
+        run: python -m pipeline.terrain.export_lod
       - name: Export terrain labels
         run: python -m pipeline.terrain.export_features
       - name: Export forest cover for viewer
@@ -64,6 +66,8 @@ jobs:
         run: python -m pipeline.web.patch_mobile
       - name: Refine wind into smoothed airflow
         run: python -m pipeline.web.patch_airflow
+      - name: Apply progressive terrain LOD
+        run: python -m pipeline.web.patch_lod
       - name: Validate viewer JavaScript syntax
         run: |
           python - <<'PY'
@@ -77,6 +81,22 @@ jobs:
           Path("/tmp/snowpack-viewer.mjs").write_text(matches[0])
           PY
           node --check /tmp/snowpack-viewer.mjs
+      - name: Validate terrain LOD metadata
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("web/data/lod/lod-meta.json").read_text())
+          assert data["version"] == 1
+          assert data["tiles"]
+          assert Path("web/data/lod/coarse-20m.bin").exists()
+          for tile in data["tiles"]:
+              path = Path("web") / tile["path"].removeprefix("./")
+              if not path.exists():
+                  raise SystemExit(f"Missing LOD tile: {path}")
+          print(f"terrain LOD ready: {len(data['tiles'])} fine tiles")
+          PY
       - name: Validate browser weather metadata
         run: |
           python - <<'PY'

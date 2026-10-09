@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 
 
+CHUNK_HOURS = 12
+SNOW_WINDOWS = (3, 6, 12, 24)
+
+
 def block_mean(array: np.ndarray, factor: int) -> np.ndarray:
     if factor <= 1:
         return array.astype(np.float32, copy=False)
@@ -61,6 +65,32 @@ def crop_slices(
 def write_float32(path: Path, array: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(np.asarray(array, dtype="<f4").tobytes(order="C"))
+
+
+def nice_scale(maximum: float) -> float:
+    if not math.isfinite(maximum) or maximum <= 0:
+        return 5.0
+    step = 2.0 if maximum <= 10 else 5.0 if maximum <= 30 else 10.0 if maximum <= 80 else 20.0
+    return max(step, math.ceil(maximum / step) * step)
+
+
+def snow_accumulations(snowfall: np.ndarray) -> dict[str, np.ndarray]:
+    positive = np.maximum(snowfall, 0).astype(np.float32, copy=False)
+    cumulative = np.cumsum(positive, axis=0, dtype=np.float32)
+    output: dict[str, np.ndarray] = {"storm": cumulative.copy()}
+    for window in SNOW_WINDOWS:
+        accumulated = cumulative.copy()
+        if window < snowfall.shape[0]:
+            accumulated[window:] -= cumulative[:-window]
+        output[str(window)] = accumulated
+    return output
+
+
+def write_time_chunks(root: Path, prefix: str, array: np.ndarray) -> None:
+    hours = array.shape[0]
+    for start in range(0, hours, CHUNK_HOURS):
+        chunk = start // CHUNK_HOURS
+        write_float32(root / f"{prefix}-{chunk:02d}.bin", array[start : start + CHUNK_HOURS])
 
 
 def run(
@@ -118,12 +148,23 @@ def run(
 
     data_root = output_root / "data"
     write_float32(data_root / "weather-elevation.bin", elevation)
+    # Retain the monolithic files for compatibility while the viewer migrates to chunks.
     write_float32(data_root / "weather-temperature.bin", temperature)
     write_float32(data_root / "weather-precipitation.bin", precipitation)
     write_float32(data_root / "weather-snowfall-water.bin", snowfall)
     write_float32(data_root / "weather-wind-speed.bin", wind_speed)
     write_float32(data_root / "weather-wind-direction.bin", wind_direction)
     write_float32(data_root / "weather-shortwave.bin", shortwave)
+
+    chunks_root = data_root / "weather-chunks"
+    write_time_chunks(chunks_root, "wind-speed", wind_speed)
+    write_time_chunks(chunks_root, "wind-direction", wind_direction)
+    write_time_chunks(chunks_root, "shortwave", shortwave)
+    accumulations = snow_accumulations(snowfall)
+    snow_scales: dict[str, float] = {}
+    for window_key, accumulated in accumulations.items():
+        write_time_chunks(chunks_root, f"snow-{window_key}", accumulated)
+        snow_scales[window_key] = nice_scale(float(np.nanmax(accumulated)))
 
     summary = pd.read_csv(forcing_root / "forcing-summary.csv")
     height, width = elevation.shape
@@ -136,9 +177,10 @@ def run(
     north = cropped_bounds["north"]
     east = west + width * render_resolution_x
     south = north - height * render_resolution_y
+    hours = int(temperature.shape[0])
 
     web_meta = {
-        "hours": int(temperature.shape[0]),
+        "hours": hours,
         "timestamps_end_jst": metadata["timestamps_end_jst"],
         "width": width,
         "height": height,
@@ -157,6 +199,12 @@ def run(
             "wind": metadata["model"]["wind"]["warning"],
             "shortwave": metadata["model"]["shortwave"]["warning"],
         },
+        "chunks": {
+            "hours_per_chunk": CHUNK_HOURS,
+            "count": math.ceil(hours / CHUNK_HOURS),
+            "snow_scales": snow_scales,
+            "path_root": "./data/weather-chunks",
+        },
         "source": "JMA AMeDAS observations downscaled over GSI terrain",
         "cropped_to_viewer": True,
     }
@@ -165,8 +213,9 @@ def run(
         encoding="utf-8",
     )
     print(
-        f"Exported {temperature.shape[0]} weather hours on focused "
-        f"{width} x {height} render grid at ~{web_meta['render_resolution_m']:.1f} m"
+        f"Exported {hours} weather hours on focused "
+        f"{width} x {height} render grid at ~{web_meta['render_resolution_m']:.1f} m; "
+        f"{CHUNK_HOURS} h browser chunks enabled"
     )
 
 

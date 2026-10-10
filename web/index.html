@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snowpack — Furanodake POC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; font-family: "Inter Tight", ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #8ec7ef; color: #eceeee; overflow: hidden; }
+    #app { position: relative; width: 100vw; height: 100vh; }
+    canvas { display:block; width:100%; height:100%; }
+    .panel { position:absolute; left:18px; top:18px; z-index:5; width:min(410px,calc(100vw - 36px)); padding:14px 15px; border:1px solid rgba(255,255,255,.18); border-radius:12px; background:rgba(18,22,24,.88); backdrop-filter:blur(11px); }
+    h1 { margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em; }
+    .sub { margin:0 0 13px; color:#b5bbbd; font-size:12px; line-height:1.4; }
+    .row { display:grid; grid-template-columns:100px 1fr; gap:10px; align-items:center; margin:9px 0; font-size:12px; }
+    .conditional { display:none; }
+    .conditional.visible { display:grid; }
+    select,input { width:100%; font:inherit; }
+    select { min-height:34px; padding:4px 8px; color:inherit; background:#191d1f; border:1px solid #444a4d; border-radius:7px; }
+    input[type="range"] { accent-color:#e2e7e8; }
+    input[type="checkbox"] { width:17px; height:17px; justify-self:start; accent-color:#e2e7e8; }
+    #timeLabel { margin:-3px 0 3px 110px; min-height:16px; color:#d9dcdd; font-size:11px; }
+    #status { margin-top:10px; color:#b5babc; font-size:11px; line-height:1.5; }
+    .legend { margin-top:10px; display:none; }
+    .legend.visible { display:block; }
+    .bar { height:7px; border-radius:999px; }
+    .terrain-bar { background:linear-gradient(90deg,#29363d,#687a80,#cbc9bc,#f1f1ee); }
+    .slope-bar { background:linear-gradient(90deg,#26342d,#887f4c,#bd6c38,#ead8cc); }
+    .aspect-bar { background:linear-gradient(90deg,#d85f5f,#d4c958,#60b17d,#5b8fd0,#d85f5f); }
+    .snow-bar { background:linear-gradient(90deg,#17214e,#164fe3,#11c6e8,#2fc66c,#f2de37,#f18a23,#df2727); }
+    .temperature-bar { background:linear-gradient(90deg,#1f2859,#3563a5,#7fc7dc,#f0e9d8); }
+    .wind-bar { background:linear-gradient(90deg,#26332f,#73877c,#c0aa62,#e7d3bf); }
+    .solar-bar { background:linear-gradient(90deg,#272b2f,#566166,#bca85f,#ffe69b); }
+    .labels { display:flex; justify-content:space-between; margin-top:4px; color:#9ca3a5; font-size:10px; }
+    .notice { margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,.1); color:#99a0a2; font-size:10px; line-height:1.4; display:none; }
+    .notice.visible { display:block; }
+    .attribution { position:absolute; right:12px; bottom:10px; max-width:min(700px,calc(100vw - 24px)); color:#eef3f4; font-size:10px; text-align:right; z-index:4; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+    .error { color:#f3b2aa !important; }
+    #featureLabels { position:absolute; inset:0; z-index:3; pointer-events:none; overflow:hidden; }
+    .map-label { position:absolute; transform:translate(-50%,-100%); white-space:nowrap; color:rgba(255,255,255,.96); font-family:"Inter Tight",sans-serif; font-size:12px; font-weight:500; text-shadow:0 1px 3px #000,0 0 7px rgba(0,0,0,.8); }
+    .map-label.summit { font-weight:600; }
+    .map-label.approximate { color:rgba(244,247,248,.86); }
+    .map-label .dot { display:block; width:5px; height:5px; margin:4px auto 0; border-radius:50%; background:#fff; box-shadow:0 0 4px #000; }
+    #compass { position:absolute; right:18px; top:18px; z-index:4; width:84px; height:84px; border:1px solid rgba(255,255,255,.45); border-radius:50%; background:rgba(20,31,37,.46); backdrop-filter:blur(8px); pointer-events:none; box-shadow:0 2px 10px rgba(0,0,0,.12); }
+    #compass::before { content:""; position:absolute; left:50%; top:4px; margin-left:-3px; width:0; height:0; border-left:3px solid transparent; border-right:3px solid transparent; border-bottom:8px solid #fff; }
+    #compass::after { content:""; position:absolute; width:4px; height:4px; border-radius:50%; background:#fff; left:50%; top:50%; transform:translate(-50%,-50%); opacity:.8; }
+    .cardinal { position:absolute; left:50%; top:50%; width:20px; margin-left:-10px; margin-top:-7px; text-align:center; font-size:10px; font-weight:600; color:#f2f6f7; transform-origin:center; text-shadow:0 1px 2px rgba(0,0,0,.5); }
+    @media (max-width:620px) {
+      .panel { top:10px; left:10px; width:calc(100vw - 20px); }
+      .row { grid-template-columns:84px 1fr; }
+      #timeLabel { margin-left:94px; }
+      #compass { right:10px; bottom:10px; top:auto; width:72px; height:72px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="featureLabels"></div>
+  <div id="compass">
+    <span class="cardinal" data-bearing="0">N</span>
+    <span class="cardinal" data-bearing="90">E</span>
+    <span class="cardinal" data-bearing="180">S</span>
+    <span class="cardinal" data-bearing="270">W</span>
+  </div>
+  <div class="panel">
+    <h1>Furanodake</h1>
+    <p class="sub">5 m terrain + historical weather experiment. Drag to rotate, scroll/pinch to zoom, right-drag to pan.</p>
+    <label class="row"><span>Layer</span><select id="layer">
+      <option value="terrain">Terrain</option>
+      <option value="snow" disabled>New snow accumulation — loading…</option>
+      <option value="slope">Slope</option>
+      <option value="aspect">Aspect</option>
+      <option value="temperature" disabled>Temperature — loading…</option>
+      <option value="wind" disabled>Wind speed — loading…</option>
+      <option value="solar" disabled>Solar loading — loading…</option>
+    </select></label>
+    <label id="windowRow" class="row conditional"><span>Accumulation</span><select id="snowWindow">
+      <option value="3">Previous 3 hours</option>
+      <option value="6">Previous 6 hours</option>
+      <option value="12">Previous 12 hours</option>
+      <option value="24" selected>Previous 24 hours</option>
+      <option value="storm">Storm to date</option>
+    </select></label>
+    <label class="row"><span>Trees</span><input id="treesToggle" type="checkbox" checked></label>
+    <label class="row"><span>Vertical</span><input id="exaggeration" type="range" min="0.6" max="2.2" value="1.1" step="0.05"></label>
+    <label id="timeRow" class="row conditional"><span>Time</span><input id="time" type="range" min="0" max="143" value="83" step="0.1"></label>
+    <div id="timeLabel"></div>
+
+    <div id="terrainLegend" class="legend visible"><div class="bar terrain-bar"></div><div class="labels"><span>low</span><span>elevation</span><span>high</span></div></div>
+    <div id="snowLegend" class="legend"><div class="bar snow-bar"></div><div class="labels"><span>0</span><span id="snowMid">—</span><span id="snowMax">— mm SWE</span></div></div>
+    <div id="slopeLegend" class="legend"><div class="bar slope-bar"></div><div class="labels"><span>0°</span><span>30°</span><span>60°+</span></div></div>
+    <div id="aspectLegend" class="legend"><div class="bar aspect-bar"></div><div class="labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div></div>
+    <div id="temperatureLegend" class="legend"><div class="bar temperature-bar"></div><div class="labels"><span>−25°C</span><span>−12°C</span><span>0°C</span></div></div>
+    <div id="windLegend" class="legend"><div class="bar wind-bar"></div><div class="labels"><span>0</span><span>7.5</span><span>15+ m/s</span></div></div>
+    <div id="solarLegend" class="legend"><div class="bar solar-bar"></div><div class="labels"><span>0</span><span>400</span><span>800+ W/m²</span></div></div>
+
+    <div id="status">Loading terrain…</div>
+    <div id="snowNotice" class="notice">The snow overlay is modelled snowfall water equivalent, accumulated over a fixed window. The colour scale stays fixed while you scrub time; it does not imply 50 m observational accuracy.</div>
+    <div id="windNotice" class="notice">Wind remains low-confidence: valley AMeDAS winds are elevation-adjusted but do not yet represent free-air/ridge flow or terrain acceleration/shelter.</div>
+    <div id="solarNotice" class="notice">Solar loading is modelled terrain exposure. The bluebird sky is deliberately cosmetic and does not represent historical weather.</div>
+  </div>
+  <div id="attribution" class="attribution"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+
+const BUILD_ID='snow-heatmap-5m-20261009-1';
+const app=document.querySelector('#app');
+const status=document.querySelector('#status');
+const layerSelect=document.querySelector('#layer');
+const snowWindow=document.querySelector('#snowWindow');
+const windowRow=document.querySelector('#windowRow');
+const treesToggle=document.querySelector('#treesToggle');
+const exaggeration=document.querySelector('#exaggeration');
+const timeSlider=document.querySelector('#time');
+const timeRow=document.querySelector('#timeRow');
+const timeLabel=document.querySelector('#timeLabel');
+const featureLabelsRoot=document.querySelector('#featureLabels');
+const snowNotice=document.querySelector('#snowNotice');
+const windNotice=document.querySelector('#windNotice');
+const solarNotice=document.querySelector('#solarNotice');
+const snowMid=document.querySelector('#snowMid');
+const snowMax=document.querySelector('#snowMax');
+const cardinalNodes=[...document.querySelectorAll('.cardinal')];
+const dynamicLayers=new Set(['snow','temperature','wind','solar']);
+const legends=Object.fromEntries(['terrain','snow','slope','aspect','temperature','wind','solar'].map(name=>[name,document.querySelector('#'+name+'Legend')]));
+
+async function loadJSON(url){const r=await fetch(url+'?v='+BUILD_ID,{cache:'no-store'});if(!r.ok)throw new Error(url+': HTTP '+r.status);return r.json();}
+async function loadFloat32(url){const r=await fetch(url+'?v='+BUILD_ID,{cache:'no-store'});if(!r.ok)throw new Error(url+': HTTP '+r.status);return new Float32Array(await r.arrayBuffer());}
+async function loadUint8(url){const r=await fetch(url+'?v='+BUILD_ID,{cache:'no-store'});if(!r.ok)throw new Error(url+': HTTP '+r.status);return new Uint8Array(await r.arrayBuffer());}
+function clamp01(v){return Math.min(Math.max(v,0),1);}
+function interpolateStops(t,stops){t=clamp01(t);for(let i=1;i<stops.length;i++){if(t<=stops[i][0]){const a=stops[i-1],b=stops[i],f=(t-a[0])/(b[0]-a[0]||1);return a[1].map((v,j)=>v+(b[1][j]-v)*f);}}return stops.at(-1)[1];}
+function terrainColor(t){return interpolateStops(t,[[0,[.22,.29,.31]],[.42,[.43,.51,.51]],[.76,[.72,.72,.66]],[1,[.93,.93,.89]]]);}
+function slopeColor(v){return interpolateStops(v/60,[[0,[.18,.26,.22]],[.5,[.55,.52,.30]],[.78,[.75,.39,.18]],[1,[.91,.82,.75]]]);}
+function aspectColor(deg){const c=new THREE.Color().setHSL((((deg%360)+360)%360)/360,.48,.60);return[c.r,c.g,c.b];}
+function deterministicNoise(a,b){const v=Math.sin(a*12.9898+b*78.233)*43758.5453;return v-Math.floor(v);}
+function niceScale(max){if(!Number.isFinite(max)||max<=0)return 5;const step=max<=10?2:max<=30?5:max<=80?10:20;return Math.max(step,Math.ceil(max/step)*step);}
+function formatTimeFraction(meta,t){const a=Math.floor(t),b=Math.min(meta.hours-1,Math.ceil(t)),f=t-a;const da=new Date(meta.timestamps_end_jst[a]).getTime();const db=new Date(meta.timestamps_end_jst[b]).getTime();const d=new Date(da+(db-da)*f);return new Intl.DateTimeFormat('en-AU',{timeZone:'Asia/Tokyo',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(d)+' JST';}
+function cardinal(deg){if(!Number.isFinite(deg))return'calm/variable';const n=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];return n[Math.round(deg/22.5)%16];}
+function setGeometryColors(geometry,count,colorAt){const c=geometry.getAttribute('color').array;for(let i=0;i<count;i++){const rgb=colorAt(i);c[i*3]=rgb[0];c[i*3+1]=rgb[1];c[i*3+2]=rgb[2];}geometry.getAttribute('color').needsUpdate=true;}
+
+try{
+  const [meta,elevation,slope,aspect]=await Promise.all([loadJSON('./data/terrain-meta.json'),loadFloat32('./data/elevation.bin'),loadFloat32('./data/slope.bin'),loadFloat32('./data/aspect.bin')]);
+  const terrainCount=meta.width*meta.height;
+  if([elevation.length,slope.length,aspect.length].some(n=>n!==terrainCount))throw new Error('Terrain data size mismatch');
+  const widthM=meta.east_m-meta.west_m,heightM=meta.north_m-meta.south_m,centreX=(meta.east_m+meta.west_m)/2,centreY=(meta.north_m+meta.south_m)/2;
+  const minE=meta.elevation_min_m,maxE=meta.elevation_max_m,sceneSpan=Math.max(widthM,heightM);
+
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,5,50000);
+  const renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;app.prepend(renderer.domElement);
+
+  const sky=new Sky();sky.scale.setScalar(450000);scene.add(sky);
+  const skyU=sky.material.uniforms;skyU.turbidity.value=1.8;skyU.rayleigh.value=1.8;skyU.mieCoefficient.value=.0025;skyU.mieDirectionalG.value=.82;
+  const fixedSun=new THREE.Vector3();const phi=THREE.MathUtils.degToRad(62),theta=THREE.MathUtils.degToRad(205);fixedSun.setFromSphericalCoords(1,phi,theta);skyU.sunPosition.value.copy(fixedSun);
+  scene.fog=new THREE.Fog(0xa7cfe6,sceneSpan*2.1,sceneSpan*5.2);
+
+  const positions=new Float32Array(terrainCount*3),colors=new Float32Array(terrainCount*3),uvs=new Float32Array(terrainCount*2);
+  for(let row=0;row<meta.height;row++)for(let col=0;col<meta.width;col++){const i=row*meta.width+col,p=i*3,u=i*2;positions[p]=(col/(meta.width-1)-.5)*widthM;positions[p+1]=elevation[i]-minE;positions[p+2]=(row/(meta.height-1)-.5)*heightM;uvs[u]=col/(meta.width-1);uvs[u+1]=row/(meta.height-1);}
+  const indices=new Uint32Array((meta.width-1)*(meta.height-1)*6);let k=0;for(let row=0;row<meta.height-1;row++)for(let col=0;col<meta.width-1;col++){const a=row*meta.width+col,b=a+1,c=a+meta.width,d=c+1;indices[k++]=a;indices[k++]=c;indices[k++]=b;indices[k++]=b;indices[k++]=c;indices[k++]=d;}
+  const terrainGeometry=new THREE.BufferGeometry();terrainGeometry.setAttribute('position',new THREE.BufferAttribute(positions,3));terrainGeometry.setAttribute('color',new THREE.BufferAttribute(colors,3));terrainGeometry.setAttribute('uv',new THREE.BufferAttribute(uvs,2));terrainGeometry.setIndex(new THREE.BufferAttribute(indices,1));terrainGeometry.computeVertexNormals();
+  const terrainMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.94,metalness:.01,side:THREE.DoubleSide});
+  const terrainMesh=new THREE.Mesh(terrainGeometry,terrainMaterial);scene.add(terrainMesh);
+
+  const overlayGeometry=terrainGeometry.clone();const overlayPos=overlayGeometry.getAttribute('position').array;for(let i=1;i<overlayPos.length;i+=3)overlayPos[i]+=1.2;overlayGeometry.getAttribute('position').needsUpdate=true;
+  const overlayMaterial=new THREE.ShaderMaterial({transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,uniforms:{dataMap:{value:null},mode:{value:0}},vertexShader:`varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,fragmentShader:`uniform sampler2D dataMap; uniform float mode; varying vec2 vUv;
+    vec3 snowPalette(float x){
+      vec3 c0=vec3(.04,.08,.28),c1=vec3(.03,.25,.90),c2=vec3(.02,.78,.92),c3=vec3(.10,.72,.32),c4=vec3(.94,.84,.08),c5=vec3(.96,.43,.06),c6=vec3(.86,.06,.06);
+      if(x<.17)return mix(c0,c1,x/.17);if(x<.34)return mix(c1,c2,(x-.17)/.17);if(x<.51)return mix(c2,c3,(x-.34)/.17);if(x<.68)return mix(c3,c4,(x-.51)/.17);if(x<.84)return mix(c4,c5,(x-.68)/.16);return mix(c5,c6,(x-.84)/.16);
+    }
+    vec3 tempPalette(float x){return mix(vec3(.05,.10,.34),mix(vec3(.12,.52,.78),vec3(.96,.91,.78),smoothstep(.45,1.0,x)),smoothstep(0.0,.65,x));}
+    vec3 windPalette(float x){return mix(vec3(.08,.18,.18),mix(vec3(.35,.58,.48),vec3(.94,.72,.38),x),x);}
+    vec3 solarPalette(float x){return mix(vec3(.10,.12,.15),mix(vec3(.62,.53,.20),vec3(1.0,.85,.36),x),x);}
+    void main(){float x=texture2D(dataMap,vUv).r;if(x<.002)discard;vec3 c=mode<.5?snowPalette(x):(mode<1.5?tempPalette(x):(mode<2.5?windPalette(x):solarPalette(x)));float alpha=mode<.5?mix(.24,.84,sqrt(x)):mix(.18,.72,x);gl_FragColor=vec4(c,alpha);}`});
+  const overlayMesh=new THREE.Mesh(overlayGeometry,overlayMaterial);overlayMesh.visible=false;scene.add(overlayMesh);
+
+  scene.add(new THREE.AmbientLight(0xffffff,.62));scene.add(new THREE.HemisphereLight(0xf5fbff,0x68716c,1.45));const key=new THREE.DirectionalLight(0xfff4dc,2.1);key.position.set(-sceneSpan*.65,sceneSpan*.95,sceneSpan*.55);scene.add(key);
+  camera.position.set(-sceneSpan*.92,sceneSpan*.68,sceneSpan*.98);const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,(maxE-minE)*.34,0);controls.enableDamping=true;controls.dampingFactor=.07;controls.minDistance=sceneSpan*.24;controls.maxDistance=sceneSpan*4;controls.maxPolarAngle=Math.PI*.49;
+
+  let treeMesh=null,forestAttribution='',featureLabels=[],weather=null,snowScales={},accumCache=new Map(),overlayTexture=null,windAnchors=[];
+  const windPositions=new Float32Array(6*160),windGeometry=new THREE.BufferGeometry();windGeometry.setAttribute('position',new THREE.BufferAttribute(windPositions,3));const windLines=new THREE.LineSegments(windGeometry,new THREE.LineBasicMaterial({color:0xf3fbff,transparent:true,opacity:.62}));windLines.visible=false;scene.add(windLines);
+  const weatherSpecs={snow:{label:'New snow accumulation',files:{snowfall:'./data/weather-snowfall-water.bin'}},temperature:{label:'Temperature',files:{temperature:'./data/weather-temperature.bin'}},wind:{label:'Wind speed',files:{windSpeed:'./data/weather-wind-speed.bin',windDirection:'./data/weather-wind-direction.bin'}},solar:{label:'Solar loading',files:{shortwave:'./data/weather-shortwave.bin'}}};
+
+  function updateStaticColors(layer){setGeometryColors(terrainGeometry,terrainCount,i=>layer==='slope'?slopeColor(slope[i]):layer==='aspect'?aspectColor(aspect[i]):terrainColor((elevation[i]-minE)/(maxE-minE)));}
+  updateStaticColors('terrain');
+  function setOverlay(values,maxValue,mode){const w=weather.meta.width,h=weather.meta.height,bytes=new Uint8Array(w*h*4);for(let i=0;i<w*h;i++){const n=clamp01(values[i]/maxValue),v=Math.round(n*255),p=i*4;bytes[p]=v;bytes[p+1]=v;bytes[p+2]=v;bytes[p+3]=255;}if(overlayTexture)overlayTexture.dispose();overlayTexture=new THREE.DataTexture(bytes,w,h,THREE.RGBAFormat,THREE.UnsignedByteType);overlayTexture.flipY=false;overlayTexture.minFilter=THREE.LinearFilter;overlayTexture.magFilter=THREE.LinearFilter;overlayTexture.needsUpdate=true;overlayMaterial.uniforms.dataMap.value=overlayTexture;overlayMaterial.uniforms.mode.value=mode;overlayMesh.visible=true;}
+  function interpolatedField(array,t){const count=weather.meta.width*weather.meta.height,a=Math.floor(t),b=Math.min(weather.meta.hours-1,Math.ceil(t)),f=t-a,out=new Float32Array(count),oa=a*count,ob=b*count;for(let i=0;i<count;i++)out[i]=array[oa+i]+(array[ob+i]-array[oa+i])*f;return out;}
+  function accumulationAt(windowKey,hour){const key=windowKey+':'+hour;if(accumCache.has(key))return accumCache.get(key);const sf=weather.data.snowfall,count=weather.meta.width*weather.meta.height,out=new Float32Array(count),start=windowKey==='storm'?0:Math.max(0,hour-Number(windowKey)+1);for(let h=start;h<=hour;h++){const off=h*count;for(let i=0;i<count;i++)out[i]+=Math.max(0,sf[off+i]);}accumCache.set(key,out);return out;}
+  function interpolatedAccum(windowKey,t){const a=Math.floor(t),b=Math.min(weather.meta.hours-1,Math.ceil(t)),f=t-a,A=accumulationAt(windowKey,a),B=accumulationAt(windowKey,b),out=new Float32Array(A.length);for(let i=0;i<A.length;i++)out[i]=A[i]+(B[i]-A[i])*f;return out;}
+  function computeSnowScales(){const windows=['3','6','12','24','storm'],count=weather.meta.width*weather.meta.height,hours=weather.meta.hours,sf=weather.data.snowfall;for(const w of windows){const n=w==='storm'?hours:Number(w),rolling=new Float32Array(count);let max=0;for(let h=0;h<hours;h++){let off=h*count;for(let i=0;i<count;i++)rolling[i]+=Math.max(0,sf[off+i]);if(w!=='storm'&&h>=n){off=(h-n)*count;for(let i=0;i<count;i++)rolling[i]-=Math.max(0,sf[off+i]);}for(let i=0;i<count;i++)if(rolling[i]>max)max=rolling[i];}snowScales[w]=niceScale(max);}}
+
+  async function ensureWeatherLayer(layer){if(!weather||!weatherSpecs[layer])return false;const spec=weatherSpecs[layer],missing=Object.keys(spec.files).filter(k=>!weather.data[k]);if(!missing.length)return true;status.classList.remove('error');status.textContent='Loading '+spec.label.toLowerCase()+'…';try{await Promise.all(missing.map(async k=>{if(weather.loading[k])return weather.loading[k];const p=loadFloat32(spec.files[k]).then(a=>{const expected=weather.meta.width*weather.meta.height*weather.meta.hours;if(a.length!==expected)throw new Error(k+' size mismatch');weather.data[k]=a;}).finally(()=>delete weather.loading[k]);weather.loading[k]=p;return p;}));if(layer==='snow'&&!Object.keys(snowScales).length)computeSnowScales();return true;}catch(e){console.error(e);status.classList.add('error');status.textContent=spec.label+' failed: '+e.message;return false;}}
+
+  function updateSnowLegend(){const s=snowScales[snowWindow.value]||1;snowMid.textContent=(s/2).toFixed(s<10?1:0);snowMax.textContent=s.toFixed(s<10?1:0)+' mm SWE';}
+  async function renderDynamic(){const layer=layerSelect.value;if(!dynamicLayers.has(layer)||!weather)return;if(!await ensureWeatherLayer(layer))return;const t=Number(timeSlider.value),summary=weather.meta.summary[Math.round(t)];timeLabel.textContent=formatTimeFraction(weather.meta,t);windLines.visible=false;updateStaticColors('terrain');if(layer==='snow'){const vals=interpolatedAccum(snowWindow.value,t),scale=snowScales[snowWindow.value];setOverlay(vals,scale,0);updateSnowLegend();let max=0;for(const v of vals)if(v>max)max=v;status.textContent=(snowWindow.value==='storm'?'Storm-to-date':snowWindow.value+' h')+' new snow · max in view '+max.toFixed(1)+' mm SWE · fixed scale 0–'+scale+' mm SWE';}else if(layer==='temperature'){const vals=interpolatedField(weather.data.temperature,t),norm=new Float32Array(vals.length);for(let i=0;i<vals.length;i++)norm[i]=clamp01((vals[i]+25)/25);setOverlay(norm,1,1);status.textContent='Temperature overlay · mountain mean '+summary.temperature_mean_c.toFixed(1)+'°C';}else if(layer==='wind'){const vals=interpolatedField(weather.data.windSpeed,t),norm=new Float32Array(vals.length);for(let i=0;i<vals.length;i++)norm[i]=clamp01(vals[i]/15);setOverlay(norm,1,2);windLines.visible=true;updateWindField(t);status.textContent='Wind overlay · mean '+summary.wind_speed_mean_m_s.toFixed(1)+' m/s from '+cardinal(summary.wind_direction_mean_deg)+' · low-confidence ridge estimate';}else{const vals=interpolatedField(weather.data.shortwave,t),norm=new Float32Array(vals.length);for(let i=0;i<vals.length;i++)norm[i]=clamp01(vals[i]/800);setOverlay(norm,1,3);status.textContent='Solar loading overlay · mean '+summary.shortwave_mean_w_m2.toFixed(0)+' W/m²';}}
+
+  function makeTreeMesh(mask){const stride=Math.max(1,Math.round(20/meta.resolution_m));let count=0;for(let r=0;r<meta.height;r+=stride)for(let c=0;c<meta.width;c+=stride)if(mask[r*meta.width+c])count++;const geometry=new THREE.ConeGeometry(5.2,18,5);geometry.translate(0,9,0);const material=new THREE.MeshStandardMaterial({color:0x6f8578,roughness:.96,emissive:0x17201c,emissiveIntensity:.16});const mesh=new THREE.InstancedMesh(geometry,material,count),matrix=new THREE.Matrix4(),q=new THREE.Quaternion(),s=new THREE.Vector3();let j=0;for(let r=0;r<meta.height;r+=stride)for(let c=0;c<meta.width;c+=stride){const i=r*meta.width+c;if(!mask[i])continue;const n=deterministicNoise(r,c);q.setFromAxisAngle(new THREE.Vector3(0,1,0),n*Math.PI*2);s.set(.7+n*.7,.65+n*.85,.7+n*.7);matrix.compose(new THREE.Vector3((c/(meta.width-1)-.5)*widthM,elevation[i]-minE,(r/(meta.height-1)-.5)*heightM),q,s);mesh.setMatrixAt(j++,matrix);}mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;return mesh;}
+  async function loadForest(){try{const [fm,mask]=await Promise.all([loadJSON('./data/forest-meta.json'),loadUint8('./data/forest-mask.bin')]);if(mask.length!==terrainCount)throw new Error('forest mask size mismatch');treeMesh=makeTreeMesh(mask);treeMesh.scale.y=Number(exaggeration.value);treeMesh.visible=treesToggle.checked;scene.add(treeMesh);forestAttribution=fm.attribution;updateAttribution();}catch(e){console.warn(e);treesToggle.checked=false;treesToggle.disabled=true;}}
+  async function loadFeatures(){try{const features=await loadJSON('./data/features.json');featureLabels=features.map(f=>{const el=document.createElement('div');el.className='map-label '+(f.kind==='summit'?'summit ':'')+(f.approximate?'approximate':'');el.innerHTML='<span>'+f.label+'</span><span class="dot"></span>';featureLabelsRoot.appendChild(el);return{feature:f,element:el};});}catch(e){console.warn(e);}}
+  function updateFeatureLabels(){const vertical=Number(exaggeration.value);for(const item of featureLabels){const f=item.feature,p=new THREE.Vector3(f.x_m-centreX,(f.elevation_m-minE)*vertical+42,centreY-f.y_m);p.project(camera);if(p.z<-1||p.z>1||Math.abs(p.x)>1.15||Math.abs(p.y)>1.15){item.element.style.display='none';continue;}item.element.style.display='block';item.element.style.left=((p.x*.5+.5)*innerWidth)+'px';item.element.style.top=((-p.y*.5+.5)*innerHeight)+'px';}}
+  function updateCompass(){const dx=camera.position.x-controls.target.x,dz=camera.position.z-controls.target.z,bearing=(Math.atan2(dx,-dz)*180/Math.PI+360)%360,heading=(bearing+180)%360,radius=29;for(const node of cardinalNodes){const angle=(Number(node.dataset.bearing)-heading)*Math.PI/180;node.style.transform='translate('+(Math.sin(angle)*radius).toFixed(1)+'px,'+(-Math.cos(angle)*radius).toFixed(1)+'px)';}}
+  function buildWindAnchors(){windAnchors=[];const w=weather.meta.width,h=weather.meta.height,b=weather.meta.bounds_m,res=weather.meta.render_resolution_m;for(let gy=1;gy<=11;gy++){const row=Math.min(h-1,Math.round(gy*h/12));for(let gx=1;gx<=14;gx++){const col=Math.min(w-1,Math.round(gx*w/15)),i=row*w+col;windAnchors.push({index:i,x:b.west+(col+.5)*res-centreX,z:centreY-(b.north-(row+.5)*res),y:weather.elevation[i]-minE+28,speed:0,direction:0,phase:deterministicNoise(row,col)});}}windAnchors=windAnchors.slice(0,160);}
+  function angleLerp(a,b,f){let d=((b-a+540)%360)-180;return(a+d*f+360)%360;}
+  function updateWindField(t){if(!windAnchors.length)buildWindAnchors();const a=Math.floor(t),b=Math.min(weather.meta.hours-1,Math.ceil(t)),f=t-a,count=weather.meta.width*weather.meta.height;for(const anchor of windAnchors){const i=anchor.index,sa=weather.data.windSpeed[a*count+i],sb=weather.data.windSpeed[b*count+i];anchor.speed=sa+(sb-sa)*f;let da=weather.data.windDirection[a*count+i],db=weather.data.windDirection[b*count+i];if(!Number.isFinite(da))da=weather.meta.summary[a].wind_direction_mean_deg||0;if(!Number.isFinite(db))db=weather.meta.summary[b].wind_direction_mean_deg||da;anchor.direction=angleLerp(da,db,f);}}
+  function animateWind(dt){if(!windLines.visible||!windAnchors.length)return;const pos=windGeometry.getAttribute('position').array,vertical=Number(exaggeration.value);let p=0;for(const a of windAnchors){const to=(a.direction+180)*Math.PI/180,dx=Math.sin(to),dz=-Math.cos(to),speed=Math.max(0,a.speed);a.phase=(a.phase+dt*(.09+speed*.018))%1;const track=260+speed*32,seg=52+speed*9,c=(a.phase-.5)*track;for(const v of[c-seg*.5,c+seg*.5]){pos[p++]=a.x+dx*v;pos[p++]=a.y*vertical;pos[p++]=a.z+dz*v;}}for(;p<pos.length;p++)pos[p]=0;windGeometry.setDrawRange(0,windAnchors.length*2);windGeometry.getAttribute('position').needsUpdate=true;}
+  function updateAttribution(){let text=meta.source_attribution+' · Weather: JMA AMeDAS observations, modelled downscaling';if(forestAttribution)text+=' · Forest: '+forestAttribution;document.querySelector('#attribution').textContent=text;}
+  updateAttribution();
+
+  async function updateLayer(){const layer=layerSelect.value,isDynamic=dynamicLayers.has(layer);timeRow.classList.toggle('visible',isDynamic);windowRow.classList.toggle('visible',layer==='snow');snowNotice.classList.toggle('visible',layer==='snow');windNotice.classList.toggle('visible',layer==='wind');solarNotice.classList.toggle('visible',layer==='solar');Object.entries(legends).forEach(([name,node])=>node.classList.toggle('visible',name===layer));windLines.visible=false;if(!isDynamic){overlayMesh.visible=false;timeLabel.textContent='';updateStaticColors(layer);status.classList.remove('error');status.textContent=meta.width+' × '+meta.height+' terrain grid · '+meta.resolution_m+' m · source DEM5A · build '+BUILD_ID;}else if(weather){await renderDynamic();}else status.textContent='Loading weather metadata…';}
+  function updateVertical(){const v=Number(exaggeration.value);terrainMesh.scale.y=v;overlayMesh.scale.y=v;if(treeMesh)treeMesh.scale.y=v;}
+  treesToggle.addEventListener('change',()=>{if(treeMesh)treeMesh.visible=treesToggle.checked;});exaggeration.addEventListener('input',updateVertical);layerSelect.addEventListener('change',()=>void updateLayer());snowWindow.addEventListener('change',()=>{accumCache.clear();if(layerSelect.value==='snow')void renderDynamic();});timeSlider.addEventListener('input',()=>{if(weather&&dynamicLayers.has(layerSelect.value))void renderDynamic();});updateVertical();
+
+  async function loadWeatherMetadata(){const wm=await loadJSON('./data/weather-meta.json'),we=await loadFloat32('./data/weather-elevation.bin');if(we.length!==wm.width*wm.height)throw new Error('weather elevation size mismatch');weather={meta:wm,elevation:we,data:{},loading:{}};timeSlider.max=String(wm.hours-1);timeSlider.value=String(Math.min(83,wm.hours-1));Object.keys(weatherSpecs).forEach(value=>{const o=[...layerSelect.options].find(x=>x.value===value);if(o){o.disabled=false;o.textContent=weatherSpecs[value].label;}});status.textContent='Weather ready · '+wm.hours+' hours at '+wm.render_resolution_m.toFixed(0)+' m · 5 m terrain · build '+BUILD_ID;}
+  await Promise.allSettled([loadForest(),loadFeatures()]);loadWeatherMetadata().catch(e=>{console.error(e);status.classList.add('error');status.textContent='Terrain loaded; weather metadata failed: '+e.message;});
+
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});const clock=new THREE.Clock();function frame(){const dt=Math.min(clock.getDelta(),.05);controls.update();updateFeatureLabels();updateCompass();animateWind(dt);renderer.render(scene,camera);requestAnimationFrame(frame);}frame();
+}catch(error){console.error(error);status.classList.add('error');status.textContent='Could not load terrain: '+error.message+' · build '+BUILD_ID;}
+</script>
+</body>
+</html>

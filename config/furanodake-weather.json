@@ -1,0 +1,41 @@
+{
+  "timezone": "Asia/Tokyo",
+  "period_start": "2025-12-29T00:00:00+09:00",
+  "period_end": "2026-01-04T00:00:00+09:00",
+  "forcing_resolution_m": 50.0,
+  "temperature_lapse_rate_c_per_m": -0.0065,
+  "precip_orographic_rate_per_1000m": 0.40,
+  "wind_speed_increase_per_1000m": 0.35,
+  "stations": [
+    {
+      "name": "Kamifurano",
+      "name_ja": "上富良野",
+      "jma_prec_no": "12",
+      "jma_block_no": "1190",
+      "amedas_id": "12596",
+      "lat": 43.455,
+      "lon": 142.465,
+      "elevation_m": 220
+    },
+    {
+      "name": "Furano",
+      "name_ja": "富良野",
+      "jma_prec_no": "12",
+      "jma_block_no": "0021",
+      "amedas_id": "12626",
+      "lat": 43.333,
+      "lon": 142.400,
+      "elevation_m": 174
+    },
+    {
+      "name": "Shirogane",
+      "name_ja": "白金",
+      "jma_prec_no": "12",
+      "jma_block_no": "0020",
+      "amedas_id": "12607",
+      "lat": 43.475,
+      "lon": 142.650,
+      "elevation_m": 658
+    }
+  ]
+}

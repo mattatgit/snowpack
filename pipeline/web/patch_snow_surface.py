@@ -17,8 +17,8 @@ def run(path: Path = HTML_PATH) -> None:
 
     text = replace_once(
         text,
-        "const BUILD_ID='snow-heatmap-5m-20261010-17';",
         "const BUILD_ID='snow-heatmap-5m-20261010-18';",
+        "const BUILD_ID='snow-heatmap-5m-20261010-19';",
         "build id",
     )
 

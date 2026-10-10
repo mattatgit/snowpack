@@ -36,10 +36,11 @@ def run(path: Path = HTML_PATH) -> None:
         "overlay fragment coverage uniforms",
     )
 
+    # patch_viewer raises the snow threshold from .002 to .008 before this patch runs.
     text = replace_once(
         text,
-        "    void main(){float x=texture2D(dataMap,vUv).r;if(x<.002)discard;",
-        "    void main(){if(maskFine>.5&&texture2D(coverageMap,vUv).r>.5)discard;float x=texture2D(dataMap,vUv).r;if(x<.002)discard;",
+        "    void main(){float x=texture2D(dataMap,vUv).r;if(x<.008)discard;",
+        "    void main(){if(maskFine>.5&&texture2D(coverageMap,vUv).r>.5)discard;float x=texture2D(dataMap,vUv).r;if(x<.008)discard;",
         "coarse overlay fine-tile discard",
     )
 
@@ -48,7 +49,7 @@ def run(path: Path = HTML_PATH) -> None:
         "  const overlayMesh=new THREE.Mesh(overlayGeometry,overlayMaterial);overlayMesh.visible=false;scene.add(overlayMesh);",
         "  const coverageSize=128,coverageBytes=new Uint8Array(coverageSize*coverageSize*4),coverageTexture=new THREE.DataTexture(coverageBytes,coverageSize,coverageSize,THREE.RGBAFormat,THREE.UnsignedByteType);coverageTexture.flipY=false;coverageTexture.minFilter=THREE.NearestFilter;coverageTexture.magFilter=THREE.NearestFilter;coverageTexture.needsUpdate=true;overlayMaterial.uniforms.coverageMap.value=coverageTexture;overlayMaterial.uniforms.maskFine.value=1;const fineOverlayMaterial=overlayMaterial.clone();fineOverlayMaterial.uniforms.coverageMap.value=coverageTexture;fineOverlayMaterial.uniforms.maskFine.value=0;\n"
         "  const overlayMesh=new THREE.Mesh(overlayGeometry,overlayMaterial);overlayMesh.visible=false;scene.add(overlayMesh);\n"
-        "  function updateOverlayCoverage(){coverageBytes.fill(0);for(const mesh of lodTiles.values()){const tile=mesh.userData.tile;if(!tile)continue;const x0=Math.max(0,Math.floor(tile.u0*(coverageSize-1))),x1=Math.min(coverageSize-1,Math.ceil(tile.u1*(coverageSize-1))),y0=Math.max(0,Math.floor(tile.v0*(coverageSize-1))),y1=Math.min(coverageSize-1,Math.ceil(tile.v1*(coverageSize-1)));for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const p=(y*coverageSize+x)*4;coverageBytes[p]=255;coverageBytes[p+1]=255;coverageBytes[p+2]=255;coverageBytes[p+3]=255;}}coverageTexture.needsUpdate=true;}" ,
+        "  function updateOverlayCoverage(){coverageBytes.fill(0);for(const mesh of lodTiles.values()){const tile=mesh.userData.tile;if(!tile)continue;const x0=Math.max(0,Math.floor(tile.u0*(coverageSize-1))),x1=Math.min(coverageSize-1,Math.ceil(tile.u1*(coverageSize-1))),y0=Math.max(0,Math.floor(tile.v0*(coverageSize-1))),y1=Math.min(coverageSize-1,Math.ceil(tile.v1*(coverageSize-1)));for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const p=(y*coverageSize+x)*4;coverageBytes[p]=255;coverageBytes[p+1]=255;coverageBytes[p+2]=255;coverageBytes[p+3]=255;}}coverageTexture.needsUpdate=true;}",
         "overlay coverage texture",
     )
 
